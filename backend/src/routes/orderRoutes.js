@@ -1,0 +1,24 @@
+import express from 'express';
+import { 
+  createOrder, 
+  getMyOrders, 
+  getAllOrders, 
+  updateOrderStatus, 
+  getAdminAnalytics,
+  verifyDeliveryDistance
+} from '../controllers/orderController.js';
+import { requireAuth, requireAdmin } from '../middleware/authMiddleware.js';
+
+const router = express.Router();
+
+// Customer/Public routes
+router.post('/verify-distance', verifyDeliveryDistance);
+router.post('/', requireAuth, createOrder);
+router.get('/my', requireAuth, getMyOrders);
+
+// Admin-only routes
+router.get('/', requireAdmin, getAllOrders);
+router.put('/:id', requireAdmin, updateOrderStatus);
+router.get('/analytics', requireAdmin, getAdminAnalytics);
+
+export default router;
