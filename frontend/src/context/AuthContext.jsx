@@ -44,10 +44,12 @@ export const AuthProvider = ({ children }) => {
     initSession();
 
     // Subscribe to Auth State Changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (session) {
         localStorage.setItem('supabase_auth_token', session.access_token);
-        await fetchUserProfile(session.user);
+        // Set user immediately so UI unblocks, then sync profile in background
+        setUser(session.user);
+        fetchUserProfile(session.user).catch(() => {});
       } else {
         localStorage.removeItem('supabase_auth_token');
         setUser(null);
@@ -60,14 +62,20 @@ export const AuthProvider = ({ children }) => {
     };
   }, []);
 
-  // Fetch public.profiles details for authenticated user
+  // Fetch public.profiles details for authenticated user (with 5s timeout)
   const fetchUserProfile = async (authUser) => {
     try {
-      const { data: profile, error } = await supabase
+      const fetchPromise = supabase
         .from('profiles')
         .select('*')
         .eq('id', authUser.id)
         .single();
+
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Profile fetch timeout')), 5000)
+      );
+
+      const { data: profile, error } = await Promise.race([fetchPromise, timeoutPromise]);
 
       if (error) {
         // Profile missing — create it
@@ -89,8 +97,8 @@ export const AuthProvider = ({ children }) => {
         setUser({ ...authUser, ...profile });
       }
     } catch (err) {
-      console.error('Error fetching user profile:', err);
-      setUser(authUser);
+      console.warn('fetchUserProfile error (using basic auth user):', err.message);
+      setUser(authUser); // Fallback: use raw Supabase auth user
     }
   };
 
