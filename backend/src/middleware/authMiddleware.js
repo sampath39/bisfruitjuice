@@ -71,3 +71,62 @@ export const requireAdmin = async (req, res, next) => {
     }
   });
 };
+
+/**
+ * Optional auth middleware — attaches user if token is valid, allows guests through
+ */
+export const optionalAuth = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      // No token — treat as guest
+      req.user = null;
+      return next();
+    }
+
+    const token = authHeader.split(' ')[1];
+
+    // Handle Mock Authentication token bypass
+    if (isMockMode || token.startsWith('mock_token_jwt_')) {
+      const role = token.includes('admin') ? 'admin' : 'customer';
+      req.user = {
+        id: role === 'admin' ? 'admin_id_mock' : 'cust_id_mock',
+        email: role === 'admin' ? 'imran@juice.com' : 'customer@demo.com',
+        phone: '+91 79896 46180',
+        fullName: role === 'admin' ? 'Imran' : 'Customer Demo',
+        role
+      };
+      return next();
+    }
+
+    // Real Supabase Auth verification
+    const { data: { user }, error } = await supabase.auth.getUser(token);
+
+    if (error || !user) {
+      // Invalid token — treat as guest (don't 401)
+      req.user = null;
+      return next();
+    }
+
+    // Fetch user profile
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', user.id)
+      .single();
+
+    req.user = {
+      id: user.id,
+      email: user.email,
+      phone: profile?.phone || user.phone,
+      fullName: profile?.full_name || user.user_metadata?.full_name || 'Customer',
+      role: profile?.role || 'customer'
+    };
+
+    next();
+  } catch (err) {
+    // On any error, let request through as guest
+    req.user = null;
+    next();
+  }
+};

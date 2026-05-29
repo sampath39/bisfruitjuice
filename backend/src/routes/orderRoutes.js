@@ -9,14 +9,16 @@ import {
   sendDeliveryOTP,
   verifyDeliveryOTP
 } from '../controllers/orderController.js';
-import { requireAuth, requireAdmin } from '../middleware/authMiddleware.js';
+import { requireAuth, requireAdmin, optionalAuth } from '../middleware/authMiddleware.js';
+
 
 const router = express.Router();
 
 // Customer/Public routes
 router.post('/verify-distance', verifyDeliveryDistance);
-router.post('/', requireAuth, createOrder);
+router.post('/', optionalAuth, createOrder);  // Allow guest orders
 router.get('/my', requireAuth, getMyOrders);
+
 
 // Admin-only routes
 router.get('/', requireAdmin, getAllOrders);

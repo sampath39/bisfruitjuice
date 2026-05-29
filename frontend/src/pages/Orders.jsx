@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
+
 import { useAuth } from '../context/AuthContext.jsx';
 import { useCart } from '../context/CartContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
@@ -30,6 +32,18 @@ export default function Orders() {
   const { user, signIn, signUp, signOut, loading: authLoading } = useAuth();
   const { cartItems, cartTotal, clearCart } = useCart();
   const { showToast } = useToast();
+  const location = useLocation();
+
+  // Auto-open auth modal when navigated with openAuth state (from Navbar Sign In button)
+  useEffect(() => {
+    if (location.state?.openAuth && !user) {
+      setIsSignUp(false);
+      setFormError('');
+      setAuthModalOpen(true);
+      // Clear the state so it doesn't re-trigger on re-renders
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state, user]);
 
   // Auth modal states
   const [authModalOpen, setAuthModalOpen] = useState(false);

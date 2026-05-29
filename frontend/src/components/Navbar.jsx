@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+
 import { useAuth } from '../context/AuthContext.jsx';
 import { useCart } from '../context/CartContext.jsx';
 import { 
@@ -18,6 +19,8 @@ export default function Navbar() {
   const { user, signOut, isAdmin } = useAuth();
   const { cartCount, setCartOpen } = useCart();
   const location = useLocation();
+  const navigate = useNavigate();
+
   
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
@@ -174,13 +177,14 @@ export default function Navbar() {
             )}
           </div>
         ) : (
-          <Link
-            to="/orders"
+          <button
+            onClick={() => navigate('/orders', { state: { openAuth: true } })}
             className="btn-primary py-1.5 px-4 text-xs shadow-none"
           >
             <User className="w-3.5 h-3.5" /> Sign In
-          </Link>
+          </button>
         )}
+
       </div>
 
       {/* Mobile Actions (Menu Toggle + Cart Toggle) */}
@@ -263,14 +267,17 @@ export default function Navbar() {
               </button>
             </div>
           ) : (
-            <Link
-              to="/orders"
-              onClick={() => setMobileMenuOpen(false)}
+            <button
+              onClick={() => {
+                setMobileMenuOpen(false);
+                navigate('/orders', { state: { openAuth: true } });
+              }}
               className="btn-primary w-full text-xs py-2 mt-1"
             >
               <User className="w-4 h-4" /> Sign In
-            </Link>
+            </button>
           )}
+
         </div>
       )}
     </nav>
