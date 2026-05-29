@@ -5,6 +5,7 @@ import { broadcast } from '../config/websocket.js';
 
 dotenv.config();
 
+// Bismilla Fruit Juice Shop - Dasarapalli Village, Udayagiri Mandal, Nellore Dt, AP
 const SHOP_LAT = parseFloat(process.env.SHOP_LATITUDE) || 14.876767;
 const SHOP_LNG = parseFloat(process.env.SHOP_LONGITUDE) || 79.289523;
 const MAX_RADIUS_KM = parseFloat(process.env.DELIVERY_RADIUS_KM) || 10.0;
