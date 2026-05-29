@@ -205,27 +205,11 @@ export default function AdminDashboard() {
     };
   }, [user, isAdmin]);
 
-  // Periodic background check fallback (every 10 seconds)
+  // Periodic background check fallback (every 10 seconds) - disabled to let real-time WebSockets manage updates without regression
   useEffect(() => {
     if (!user || !isAdmin) return;
     const interval = setInterval(() => {
       silentReloadMetrics();
-      // Fetch fresh orders
-      api.get('/orders').then((res) => {
-        if (res.data) {
-          setOrdersList((prev) => {
-            // Merge lists cleanly to avoid losing new orders in real-time
-            const merged = [...res.data];
-            prev.forEach(item => {
-              if (!merged.some(o => o.id === item.id)) {
-                merged.push(item);
-              }
-            });
-            // Sort by created_at descending
-            return merged.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-          });
-        }
-      }).catch(() => {});
     }, 10000);
 
     return () => clearInterval(interval);
@@ -507,7 +491,7 @@ export default function AdminDashboard() {
       case 'pending':
         return ordersList.filter(o => o.order_status === 'pending');
       case 'accepted':
-        return ordersList.filter(o => o.order_status === 'accepted');
+        return ordersList.filter(o => ['accepted', 'preparing', 'out_for_delivery'].includes(o.order_status));
       case 'otp_pending':
         return ordersList.filter(o => o.order_status === 'otp_pending');
       case 'delivered':
@@ -529,7 +513,7 @@ export default function AdminDashboard() {
     ]},
     { section: 'ACTIVE ORDERS', items: [
       { id: 'pending', label: 'Pending Orders', count: ordersList.filter(o => o.order_status === 'pending').length, icon: <Clock className="w-4 h-4" /> },
-      { id: 'accepted', label: 'Accepted Orders', count: ordersList.filter(o => o.order_status === 'accepted').length, icon: <ThumbsUp className="w-4 h-4" /> },
+      { id: 'accepted', label: 'Accepted Orders', count: ordersList.filter(o => ['accepted', 'preparing', 'out_for_delivery'].includes(o.order_status)).length, icon: <ThumbsUp className="w-4 h-4" /> },
       { id: 'otp_pending', label: 'OTP Verification Orders', count: ordersList.filter(o => o.order_status === 'otp_pending').length, icon: <Smartphone className="w-4 h-4" /> }
     ]},
     { section: 'ARCHIVE & PAYMENTS', items: [

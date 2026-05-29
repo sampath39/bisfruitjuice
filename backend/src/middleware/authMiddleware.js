@@ -20,12 +20,31 @@ export const requireAuth = async (req, res, next) => {
     
     // Handle Mock Authentication token bypass (used in tests and local development)
     if (isMockMode || token.startsWith('mock_token_jwt_')) {
-      const role = token.includes('admin') ? 'admin' : 'customer';
+      let role = 'customer';
+      let id = 'cust_id_mock';
+      let email = 'customer@demo.com';
+      let fullName = 'Customer Demo';
+      let phone = '+91 79896 46180';
+
+      if (token.startsWith('mock_token_jwt_')) {
+        const parts = token.split('_');
+        role = parts[3] || (token.includes('admin') ? 'admin' : 'customer');
+        id = parts[4] || (role === 'admin' ? 'admin_id_mock' : 'cust_id_mock');
+        email = parts[5] ? decodeURIComponent(parts[5]) : (role === 'admin' ? 'imran@juice.com' : 'customer@demo.com');
+        fullName = parts[6] ? decodeURIComponent(parts[6]) : (role === 'admin' ? 'Imran' : 'Customer Demo');
+        phone = parts[7] ? decodeURIComponent(parts[7]) : '+91 79896 46180';
+      } else {
+        role = token.includes('admin') ? 'admin' : 'customer';
+        id = role === 'admin' ? 'admin_id_mock' : 'cust_id_mock';
+        email = role === 'admin' ? 'imran@juice.com' : 'customer@demo.com';
+        fullName = role === 'admin' ? 'Imran' : 'Customer Demo';
+      }
+
       req.user = {
-        id: role === 'admin' ? 'admin_id_mock' : 'cust_id_mock',
-        email: role === 'admin' ? 'imran@juice.com' : 'customer@demo.com',
-        phone: '+91 79896 46180',
-        fullName: role === 'admin' ? 'Imran' : 'Customer Demo',
+        id,
+        email,
+        phone,
+        fullName,
         role
       };
       return next();
@@ -92,12 +111,31 @@ export const optionalAuth = async (req, res, next) => {
 
     // Handle Mock Authentication token bypass
     if (isMockMode || token.startsWith('mock_token_jwt_')) {
-      const role = token.includes('admin') ? 'admin' : 'customer';
+      let role = 'customer';
+      let id = 'cust_id_mock';
+      let email = 'customer@demo.com';
+      let fullName = 'Customer Demo';
+      let phone = '+91 79896 46180';
+
+      if (token.startsWith('mock_token_jwt_')) {
+        const parts = token.split('_');
+        role = parts[3] || (token.includes('admin') ? 'admin' : 'customer');
+        id = parts[4] || (role === 'admin' ? 'admin_id_mock' : 'cust_id_mock');
+        email = parts[5] ? decodeURIComponent(parts[5]) : (role === 'admin' ? 'imran@juice.com' : 'customer@demo.com');
+        fullName = parts[6] ? decodeURIComponent(parts[6]) : (role === 'admin' ? 'Imran' : 'Customer Demo');
+        phone = parts[7] ? decodeURIComponent(parts[7]) : '+91 79896 46180';
+      } else {
+        role = token.includes('admin') ? 'admin' : 'customer';
+        id = role === 'admin' ? 'admin_id_mock' : 'cust_id_mock';
+        email = role === 'admin' ? 'imran@juice.com' : 'customer@demo.com';
+        fullName = role === 'admin' ? 'Imran' : 'Customer Demo';
+      }
+
       req.user = {
-        id: role === 'admin' ? 'admin_id_mock' : 'cust_id_mock',
-        email: role === 'admin' ? 'imran@juice.com' : 'customer@demo.com',
-        phone: '+91 79896 46180',
-        fullName: role === 'admin' ? 'Imran' : 'Customer Demo',
+        id,
+        email,
+        phone,
+        fullName,
         role
       };
       return next();

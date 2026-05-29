@@ -64,7 +64,7 @@ export const AuthProvider = ({ children }) => {
         if (savedMockUser) {
           const parsed = JSON.parse(savedMockUser);
           setUser(parsed);
-          localStorage.setItem('supabase_auth_token', 'mock_token_jwt_' + parsed.role);
+          localStorage.setItem('supabase_auth_token', `mock_token_jwt_${parsed.role}_${parsed.id}_${encodeURIComponent(parsed.email || '')}_${encodeURIComponent(parsed.full_name || '')}_${encodeURIComponent(parsed.phone || '')}`);
         } else {
           localStorage.removeItem('supabase_auth_token');
           setUser(null);
@@ -91,7 +91,7 @@ export const AuthProvider = ({ children }) => {
           created_at: new Date().toISOString()
         };
         localStorage.setItem('mock_user', JSON.stringify(loggedInUser));
-        localStorage.setItem('supabase_auth_token', 'mock_token_jwt_admin');
+        localStorage.setItem('supabase_auth_token', `mock_token_jwt_${loggedInUser.role}_${loggedInUser.id}_${encodeURIComponent(loggedInUser.email || '')}_${encodeURIComponent(loggedInUser.full_name || '')}_${encodeURIComponent(loggedInUser.phone || '')}`);
         setUser(loggedInUser);
         console.log('[Clerk Auth] Bypass admin authentication succeeded for:', email);
         return { data: { user: loggedInUser }, error: null };
@@ -127,7 +127,7 @@ export const AuthProvider = ({ children }) => {
         created_at: new Date().toISOString()
       };
       localStorage.setItem('mock_user', JSON.stringify(loggedInUser));
-      localStorage.setItem('supabase_auth_token', 'mock_token_jwt_customer');
+      localStorage.setItem('supabase_auth_token', `mock_token_jwt_${loggedInUser.role}_${loggedInUser.id}_${encodeURIComponent(loggedInUser.email || '')}_${encodeURIComponent(loggedInUser.full_name || '')}_${encodeURIComponent(loggedInUser.phone || '')}`);
       setUser(loggedInUser);
       return { data: { user: loggedInUser }, error: null };
     }
@@ -190,7 +190,7 @@ export const AuthProvider = ({ children }) => {
         created_at: new Date().toISOString()
       };
       localStorage.setItem('mock_user', JSON.stringify(newUser));
-      localStorage.setItem('supabase_auth_token', 'mock_token_jwt_' + newUser.role);
+      localStorage.setItem('supabase_auth_token', `mock_token_jwt_${newUser.role}_${newUser.id}_${encodeURIComponent(newUser.email || '')}_${encodeURIComponent(newUser.full_name || '')}_${encodeURIComponent(newUser.phone || '')}`);
       setUser(newUser);
       return { data: { user: newUser }, error: null };
     }

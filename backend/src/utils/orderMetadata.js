@@ -60,6 +60,14 @@ export const mergeOrderWithMetadata = (order) => {
     ...order,
     ...meta
   };
+  
+  // Custom Order Code fallback generation (BFJ-2026-XXXX) if order_code is null
+  if (!merged.order_code) {
+    const cleanId = order.id.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    const shortHash = cleanId.substring(0, 4) || '7777';
+    merged.order_code = `BFJ-2026-${shortHash}`;
+  }
+
   // If rich status exists in metadata, override the db status
   if (meta.metadata_status) {
     merged.order_status = meta.metadata_status;
