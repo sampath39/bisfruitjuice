@@ -222,16 +222,13 @@ export const AuthProvider = ({ children }) => {
         return { data: null, error: { message: humanizeSupabaseError(error) } };
       }
 
-      // Auth succeeded — store token
+      // Auth succeeded — store token immediately and return.
+      // Fire fetchUserProfile in background (don't await) so sign-in
+      // never hangs if the profiles table is slow or unreachable.
       if (data.session) {
         localStorage.setItem('supabase_auth_token', data.session.access_token);
-        // Fetch profile separately — errors here must NOT block the sign-in success
-        try {
-          await fetchUserProfile(data.user);
-        } catch (profileErr) {
-          console.warn('Profile fetch failed, using basic auth data:', profileErr);
-          setUser(data.user); // Fall back to basic Supabase user data
-        }
+        setUser(data.user); // Set basic user immediately so UI unblocks
+        fetchUserProfile(data.user).catch(() => {}); // Background sync
       }
 
       return { data, error: null }; // Always return success if Supabase auth succeeded

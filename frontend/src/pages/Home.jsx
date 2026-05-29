@@ -10,69 +10,57 @@ import {
   Flame,
   Award,
   Zap,
-  Check
+  Phone,
+  Home as HomeIcon,
+  XCircle,
+  Send
 } from 'lucide-react';
 import { calculateDistance, SHOP_LOCATION } from '../utils/location.js';
 
+// ── Strict delivery whitelist ─────────────────────────────────────────────
+const DELIVERY_ZONES = [
+  { name: 'Udayagiri / Dasarapalli',  keywords: ['udayagiri', 'dasarapalli', 'dasara palli'] },
+  { name: 'Dachuru',                  keywords: ['dachuru'] },
+  { name: 'Thirumalapadu',            keywords: ['thirumalapadu', 'thirumallapadu', 'tirumalapadu'] },
+  { name: 'Kesamaneni Palli',         keywords: ['kesamaneni', 'kesamanenipalli'] },
+  { name: 'Verubotla Palli',          keywords: ['verubotla', 'verubotlapalli'] },
+  { name: 'Kanupurupalle',            keywords: ['kanupurupalle', 'kanupurupalli', 'kanupuru'] },
+  { name: 'Peramkonda',               keywords: ['peramkonda'] },
+  { name: 'Kulluru',                  keywords: ['kulluru'] },
+  { name: 'Penubarthi',               keywords: ['penubarthi'] },
+  { name: 'Kondur',                   keywords: ['kondur'] },
+  { name: 'Rapur area',               keywords: ['rapur'] },
+  { name: 'Kaluvoya area',            keywords: ['kaluvoya'] },
+  { name: 'Podalakur area',           keywords: ['podalakur', 'podalakuru'] },
+];
+
 export default function Home() {
-  const [testAddress, setTestAddress] = useState('');
-  const [distanceResult, setDistanceResult] = useState(null);
-  const [isChecking, setIsChecking] = useState(false);
+  const [locationQuery, setLocationQuery]         = useState('');
+  const [zoneResult, setZoneResult]               = useState(null);
+  const [isChecking, setIsChecking]               = useState(false);
+  const [fullAddress, setFullAddress]             = useState('');
+  const [mobileNumber, setMobileNumber]           = useState('');
+  const [detailsSubmitted, setDetailsSubmitted]   = useState(false);
 
-  // Known towns/areas near Udayagiri shop and their approximate distances (KM)
-  const knownLocations = [
-    { keywords: ['udayagiri', 'dasarapalli', 'mandal'], km: 1.5 },
-    { keywords: ['tenali'], km: 7.5 },
-    { keywords: ['markapuram', 'markapur'], km: 5.2 },
-    { keywords: ['kandukur', 'kandukuru'], km: 8.1 },
-    { keywords: ['ongole'], km: 45 },
-    { keywords: ['nellore', 'nellore city'], km: 60 },
-    { keywords: ['hyderabad', 'hyd'], km: 290 },
-    { keywords: ['vijayawada'], km: 130 },
-    { keywords: ['guntur'], km: 110 },
-    { keywords: ['chirala'], km: 35 },
-    { keywords: ['narasaraopet'], km: 90 },
-    { keywords: ['podili'], km: 18 },
-    { keywords: ['addanki'], km: 22 },
-    { keywords: ['giddalur'], km: 55 },
-    { keywords: ['kanigiri'], km: 38 },
-    { keywords: ['darsi'], km: 12 },
-    { keywords: ['delhi', 'mumbai', 'chennai', 'bangalore', 'bengaluru'], km: 800 },
-  ];
+  const resetChecker = () => { setZoneResult(null); setDetailsSubmitted(false); setFullAddress(''); setMobileNumber(''); };
 
-  const handleCheckDelivery = (e) => {
+  const handleCheckZone = (e) => {
     e.preventDefault();
-    if (!testAddress.trim()) return;
-
+    if (!locationQuery.trim()) return;
     setIsChecking(true);
-    const query = testAddress.trim().toLowerCase();
-
+    resetChecker();
+    const q = locationQuery.trim().toLowerCase();
     setTimeout(() => {
-      // Check against known locations first
-      let matched = null;
-      for (const loc of knownLocations) {
-        if (loc.keywords.some(k => query.includes(k))) {
-          matched = loc;
-          break;
-        }
-      }
-
-      let calculatedKm;
-      if (matched) {
-        // Add slight variation so it doesn't look hardcoded
-        calculatedKm = matched.km + (Math.random() * 0.4 - 0.2);
-      } else {
-        // Unknown location - use string hash for deterministic result
-        const hash = query.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
-        calculatedKm = (hash % 18) + 2 + Math.random();
-      }
-
-      setDistanceResult({
-        distance: parseFloat(calculatedKm.toFixed(2)),
-        isEligible: calculatedKm <= 10.0
-      });
+      const matched = DELIVERY_ZONES.find(z => z.keywords.some(kw => q.includes(kw)));
+      setZoneResult(matched ? { eligible: true, matchedZone: matched.name } : { eligible: false });
       setIsChecking(false);
-    }, 900);
+    }, 800);
+  };
+
+  const handleDetailsSubmit = (e) => {
+    e.preventDefault();
+    if (!fullAddress.trim() || mobileNumber.trim().length < 10) return;
+    setDetailsSubmitted(true);
   };
 
   const featuredProducts = [
@@ -316,72 +304,148 @@ export default function Home() {
       </section>
 
       {/* 4. DELIVERY CHECKER SECTION */}
-      <section className="py-20 px-6 bg-gradient-to-tr from-emerald-50/40 via-white to-orange-50/20 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950/60 border-t border-slate-150 dark:border-slate-850">
-        <div className="max-w-4xl mx-auto glass-card p-8 sm:p-12 rounded-3xl shadow-xl text-center flex flex-col gap-6 relative overflow-hidden">
+      <section className="py-16 sm:py-20 px-4 sm:px-6 bg-gradient-to-tr from-emerald-50/40 via-white to-orange-50/20 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950/60 border-t border-slate-150 dark:border-slate-850">
+        <div className="max-w-3xl mx-auto glass-card p-6 sm:p-10 rounded-3xl shadow-xl text-center flex flex-col gap-6 relative overflow-hidden">
           <div className="absolute -top-10 -right-10 w-40 h-40 bg-orange-200/20 dark:bg-orange-950/10 rounded-full blur-2xl pointer-events-none" />
           <div className="absolute -bottom-10 -left-10 w-40 h-40 bg-green-200/20 dark:bg-green-950/10 rounded-full blur-2xl pointer-events-none" />
 
-          <div className="flex flex-col items-center gap-2 relative z-10">
-            <div className="p-3 bg-green-50 dark:bg-green-950/50 rounded-2xl text-primary w-max mb-1 shadow-sm">
-              <MapPin className="w-7 h-7" />
+          {/* Heading */}
+          <div className="flex flex-col items-center gap-3 relative z-10">
+            <div className="p-4 bg-green-50 dark:bg-green-950/50 rounded-2xl text-primary w-max shadow-sm">
+              <MapPin className="w-8 h-8" />
             </div>
-            <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white">Are You Within Our Delivery Zone?</h2>
-            <p className="text-slate-400 text-sm max-w-md mt-1">
-              We deliver fresh chilled juices and items within a <strong className="text-slate-600 dark:text-slate-300">10 KM</strong> radius from our shop in Udayagiri (Dasarapalli Village). Check if your address qualifies!
+            <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white">Do We Deliver To You?</h2>
+            <p className="text-slate-500 dark:text-slate-400 text-sm max-w-lg leading-relaxed">
+              We serve <strong className="text-slate-700 dark:text-slate-200">select villages and towns</strong> around Udayagiri (Dasarapalli Village).
+              Type your village name below to check instantly.
             </p>
           </div>
 
-          <form onSubmit={handleCheckDelivery} className="flex flex-col sm:flex-row gap-3 max-w-xl mx-auto w-full relative z-10 mt-2">
+          {/* Allowed zone badges */}
+          <div className="flex flex-wrap justify-center gap-2 relative z-10">
+            {DELIVERY_ZONES.map(z => (
+              <span key={z.name} className="px-3 py-1.5 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200/60 dark:border-emerald-800/40 text-emerald-700 dark:text-emerald-300 text-xs font-semibold rounded-full">
+                📍 {z.name}
+              </span>
+            ))}
+          </div>
+
+          {/* Zone check input */}
+          <form onSubmit={handleCheckZone} className="flex flex-col sm:flex-row gap-3 relative z-10">
             <input
               type="text"
-              value={testAddress}
-              onChange={(e) => setTestAddress(e.target.value)}
-              placeholder="Enter your locality or landmark (e.g. Dasarapalli, Udayagiri)"
-              className="flex-1 px-5 py-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 placeholder-slate-400 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+              value={locationQuery}
+              onChange={(e) => { setLocationQuery(e.target.value); resetChecker(); }}
+              placeholder="Type your village / town name (e.g. Dachuru, Rapur...)"
+              className="flex-1 px-5 py-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 placeholder-slate-400 text-sm focus:outline-none focus:ring-2 focus:ring-primary transition-all"
               required
             />
             <button
               type="submit"
               disabled={isChecking}
-              className="btn-primary py-3.5 sm:py-3 px-8 text-sm shrink-0 whitespace-nowrap shadow-none rounded-xl"
+              className="btn-primary py-3.5 sm:py-3 px-7 text-sm shrink-0 whitespace-nowrap rounded-xl"
             >
-              {isChecking ? 'Checking...' : 'Check Availability'}
+              {isChecking ? '⏳ Checking...' : 'Check Availability'}
             </button>
           </form>
 
-          {/* Results display */}
-          {distanceResult !== null && (
+          {/* Not eligible result */}
+          {zoneResult !== null && !zoneResult.eligible && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className={`p-5 rounded-2xl border text-sm max-w-xl mx-auto w-full text-left flex items-start gap-3 relative z-10 ${
-                distanceResult.isEligible
-                  ? 'bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-200/40 text-emerald-800 dark:text-emerald-300'
-                  : 'bg-rose-50/80 dark:bg-rose-950/30 border-rose-200/40 text-rose-800 dark:text-rose-350'
-              }`}
+              className="relative z-10 p-5 rounded-2xl border bg-rose-50/80 dark:bg-rose-950/20 border-rose-200/50 dark:border-rose-800/40 text-left flex items-start gap-4"
             >
-              <div className="mt-0.5">
-                {distanceResult.isEligible ? (
-                  <CheckCircle className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                ) : (
-                  <span className="w-5 h-5 rounded-full bg-rose-500 text-white flex items-center justify-center font-bold text-xs shrink-0">!</span>
-                )}
-              </div>
-              <div className="flex-1">
-                <p className="font-semibold text-base">
-                  {distanceResult.isEligible ? 'We Deliver Here!' : 'Delivery Not Available'}
+              <XCircle className="w-6 h-6 text-rose-500 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold text-rose-700 dark:text-rose-300 text-base">Sorry, We Don't Deliver There Yet</p>
+                <p className="text-rose-600/80 dark:text-rose-400/80 text-xs mt-1 leading-relaxed">
+                  <strong>"{locationQuery}"</strong> is not in our delivery zone. We only deliver to the areas listed above.
                 </p>
-                <p className="text-xs mt-1 leading-relaxed text-slate-600 dark:text-slate-400">
-                  {distanceResult.isEligible
-                    ? `Your location is approximately ${distanceResult.distance} KM from our shop, which is within our 10 KM delivery limit. Proceed to menu and order now!`
-                    : `Your location is approximately ${distanceResult.distance} KM from our shop. Our current delivery limit is 10 KM. You cannot place delivery orders.`}
-                </p>
-                {distanceResult.isEligible && (
-                  <Link to="/products" className="inline-flex items-center gap-1 text-xs font-bold text-primary hover:underline mt-2.5">
-                    Start Ordering Now <ArrowRight className="w-3.5 h-3.5" />
-                  </Link>
-                )}
               </div>
+            </motion.div>
+          )}
+
+          {/* Eligible — show details form */}
+          {zoneResult?.eligible && !detailsSubmitted && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="relative z-10 flex flex-col gap-5"
+            >
+              <div className="flex items-start gap-3 p-4 rounded-2xl bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200/50 dark:border-emerald-800/40 text-left">
+                <CheckCircle className="w-6 h-6 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-bold text-emerald-700 dark:text-emerald-300 text-base">Great! We Deliver to {zoneResult.matchedZone} 🎉</p>
+                  <p className="text-emerald-600/80 dark:text-emerald-400/80 text-xs mt-1">Please fill your full address and mobile number below.</p>
+                </div>
+              </div>
+
+              <form onSubmit={handleDetailsSubmit} className="flex flex-col gap-4 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl p-5 sm:p-6 text-left shadow-sm">
+                <h3 className="font-bold text-slate-800 dark:text-white text-sm uppercase tracking-widest">📋 Your Delivery Details</h3>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+                    Full Address <span className="text-rose-500">*</span>
+                  </label>
+                  <textarea
+                    value={fullAddress}
+                    onChange={(e) => setFullAddress(e.target.value)}
+                    placeholder="House No., Street, Village, Landmark, Pincode"
+                    rows={3}
+                    required
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 placeholder-slate-400 text-sm focus:outline-none focus:ring-2 focus:ring-primary transition-all resize-none leading-relaxed"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-semibold text-slate-600 dark:text-slate-300">
+                    Mobile Number <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="tel"
+                    value={mobileNumber}
+                    onChange={(e) => setMobileNumber(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                    placeholder="10-digit mobile number"
+                    maxLength={10}
+                    required
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 placeholder-slate-400 text-sm focus:outline-none focus:ring-2 focus:ring-primary transition-all font-mono tracking-widest"
+                  />
+                  {mobileNumber.length > 0 && mobileNumber.length < 10 && (
+                    <p className="text-[11px] text-rose-500">{mobileNumber.length}/10 digits entered</p>
+                  )}
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={!fullAddress.trim() || mobileNumber.length < 10}
+                  className="btn-primary w-full py-3 text-sm font-semibold rounded-xl gap-2 mt-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Confirm &amp; Continue to Menu <ArrowRight className="w-4 h-4" />
+                </button>
+              </form>
+            </motion.div>
+          )}
+
+          {/* Final confirmation */}
+          {detailsSubmitted && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="relative z-10 p-6 rounded-2xl bg-gradient-to-br from-emerald-50 to-green-50 dark:from-emerald-950/40 dark:to-green-950/30 border border-emerald-200/60 dark:border-emerald-800/40 text-center flex flex-col items-center gap-4"
+            >
+              <div className="w-14 h-14 rounded-full bg-emerald-500 flex items-center justify-center shadow-lg">
+                <CheckCircle className="w-8 h-8 text-white" />
+              </div>
+              <div>
+                <p className="font-extrabold text-emerald-700 dark:text-emerald-300 text-lg">You're All Set! 🎉</p>
+                <p className="text-emerald-600/80 dark:text-emerald-400/80 text-sm mt-1 leading-relaxed">
+                  Location: <strong>{zoneResult?.matchedZone}</strong> · Mobile: <strong>{mobileNumber}</strong>
+                </p>
+              </div>
+              <Link to="/products" className="btn-primary px-8 py-3 text-sm rounded-xl shadow-none">
+                <ShoppingBag className="w-4 h-4" /> Order Now <ArrowRight className="w-4 h-4" />
+              </Link>
             </motion.div>
           )}
         </div>
@@ -389,3 +453,4 @@ export default function Home() {
     </div>
   );
 }
+
