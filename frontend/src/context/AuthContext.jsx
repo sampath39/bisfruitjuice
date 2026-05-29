@@ -70,26 +70,21 @@ export const AuthProvider = ({ children }) => {
         .single();
 
       if (error) {
-        console.warn('Could not load user profile, syncing profile table...');
-        // Let's create user profile if missing
+        // Profile missing — create it
         const { data: newProfile } = await supabase
           .from('profiles')
-          .insert([
+          .upsert([
             {
               id: authUser.id,
-              phone: authUser.phone || '',
-              full_name: authUser.user_metadata?.full_name || 'Customer',
+              phone: authUser.phone || authUser.user_metadata?.phone || '',
+              full_name: authUser.user_metadata?.full_name || authUser.email?.split('@')[0] || 'Customer',
               role: authUser.user_metadata?.role || 'customer'
             }
           ])
           .select()
           .single();
-          
-        if (newProfile) {
-          setUser({ ...authUser, ...newProfile });
-        } else {
-          setUser(authUser);
-        }
+
+        setUser({ ...authUser, ...(newProfile || {}), full_name: newProfile?.full_name || authUser.user_metadata?.full_name || 'Customer' });
       } else {
         setUser({ ...authUser, ...profile });
       }
@@ -99,12 +94,37 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Sign Up method
+  // Helper to humanize Supabase error messages
+  const humanizeSupabaseError = (err) => {
+    const msg = err?.message || '';
+    if (msg.includes('Email not confirmed')) {
+      return 'Please verify your email before logging in. Check your inbox for the confirmation link.';
+    }
+    if (msg.includes('Invalid login credentials') || msg.includes('invalid_credentials')) {
+      return 'Incorrect email or password. Please try again.';
+    }
+    if (msg.includes('User already registered')) {
+      return 'An account with this email already exists. Please sign in instead.';
+    }
+    if (msg.includes('Password should be at least')) {
+      return 'Password must be at least 6 characters long.';
+    }
+    if (msg.includes('Unable to validate email')) {
+      return 'Please enter a valid email address.';
+    }
+    if (msg.includes('over_email_send_rate_limit') || msg.includes('rate limit')) {
+      return 'Too many attempts. Please wait a minute and try again.';
+    }
+    if (msg.includes('Network') || msg.includes('fetch')) {
+      return 'Network error. Please check your connection and try again.';
+    }
+    return msg || 'Authentication failed. Please try again.';
+  };
+
+  // Sign Up method — does NOT touch global loading state
   const signUp = async (email, password, fullName, phone, role = 'customer') => {
-    setLoading(true);
     try {
       if (isMockMode) {
-        // Mock Register
         const mockId = `usr_mock_${Math.random().toString(36).substring(2, 11)}`;
         const newUser = {
           id: mockId,
@@ -125,53 +145,62 @@ export const AuthProvider = ({ children }) => {
         email,
         password,
         options: {
-          data: {
-            full_name: fullName,
-            phone: phone,
-            role: role // default to customer
-          }
+          data: { full_name: fullName, phone, role }
         }
       });
 
-      if (error) throw error;
+      if (error) {
+        return { data: null, error: { message: humanizeSupabaseError(error) } };
+      }
 
-      // Sync profile table manually to be immediate
+      // Sync profile table (don't block sign-up if this fails)
       if (data.user) {
-        await supabase.from('profiles').upsert({
-          id: data.user.id,
-          phone,
-          full_name: fullName,
-          role
-        });
+        try {
+          await supabase.from('profiles').upsert({ id: data.user.id, phone, full_name: fullName, role });
+        } catch (e) {
+          console.warn('Profile upsert failed (table may not exist yet):', e);
+        }
+      }
+
+      // Supabase requires email confirmation (default) — user must confirm before signing in
+      if (data.user && !data.session) {
+        return { 
+          data, 
+          error: null, 
+          requiresEmailConfirmation: true,
+          message: '✅ Account created! Check your email and click the confirmation link, then sign in.'
+        };
+      }
+
+      // Email confirmation disabled in Supabase — auto-signed-in
+      if (data.session) {
+        localStorage.setItem('supabase_auth_token', data.session.access_token);
+        try {
+          await fetchUserProfile(data.user);
+        } catch (e) {
+          setUser(data.user);
+        }
       }
 
       return { data, error: null };
     } catch (err) {
       console.error('Sign up error:', err);
-      return { data: null, error: err };
-    } finally {
-      setLoading(false);
+      return { data: null, error: { message: humanizeSupabaseError(err) } };
     }
   };
 
-  // Sign In method
+  // Sign In method — does NOT touch global loading state
   const signIn = async (email, password) => {
-    setLoading(true);
     try {
       if (isMockMode) {
-        // Mock Login
         let role = 'customer';
-        let fullName = 'Imran Admin';
-        // Admin quick toggle login
+        let fullName = 'Customer User';
         if (email.startsWith('admin') || email === 'imran@juice.com') {
           role = 'admin';
           fullName = 'Imran';
-        } else {
-          fullName = 'Customer User';
         }
-
         const loggedInUser = {
-          id: email.startsWith('admin') ? 'admin_id_mock' : 'cust_id_mock',
+          id: role === 'admin' ? 'admin_id_mock' : 'cust_id_mock',
           email,
           phone: '+91 99999 99999',
           full_name: fullName,
@@ -185,22 +214,28 @@ export const AuthProvider = ({ children }) => {
       }
 
       // Real Supabase Sign In
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password
-      });
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
-      if (error) throw error;
+      if (error) {
+        return { data: null, error: { message: humanizeSupabaseError(error) } };
+      }
+
+      // Auth succeeded — store token
       if (data.session) {
         localStorage.setItem('supabase_auth_token', data.session.access_token);
-        await fetchUserProfile(data.user);
+        // Fetch profile separately — errors here must NOT block the sign-in success
+        try {
+          await fetchUserProfile(data.user);
+        } catch (profileErr) {
+          console.warn('Profile fetch failed, using basic auth data:', profileErr);
+          setUser(data.user); // Fall back to basic Supabase user data
+        }
       }
-      return { data, error: null };
+
+      return { data, error: null }; // Always return success if Supabase auth succeeded
     } catch (err) {
       console.error('Sign in error:', err);
-      return { data: null, error: err };
-    } finally {
-      setLoading(false);
+      return { data: null, error: { message: humanizeSupabaseError(err) } };
     }
   };
 

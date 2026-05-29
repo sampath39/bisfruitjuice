@@ -238,24 +238,28 @@ export default function Orders() {
           setSubmittingAuth(false);
           return;
         }
-        const { error } = await signUp(authEmail, authPassword, authName, authPhone);
-        if (error) {
-          setFormError(error.message || 'Registration failed');
+        const result = await signUp(authEmail, authPassword, authName, authPhone);
+        if (result.error) {
+          setFormError(result.error.message || 'Registration failed');
+        } else if (result.requiresEmailConfirmation) {
+          // Show confirmation message in the modal — keep modal open so user reads it
+          setFormError(result.message || '✅ Check your email for a confirmation link before signing in.');
         } else {
-          showToast('Account created successfully!', 'success');
+          showToast('Account created! You are now signed in.', 'success');
           setAuthModalOpen(false);
         }
       } else {
-        const { error } = await signIn(authEmail, authPassword);
+        const { data, error } = await signIn(authEmail, authPassword);
         if (error) {
-          setFormError(error.message || 'Login failed. Please check credentials.');
+          setFormError(error.message || 'Login failed. Please check your email and password.');
         } else {
-          showToast('Logged in successfully!', 'success');
+          showToast('Logged in successfully! 🎉', 'success');
           setAuthModalOpen(false);
         }
       }
     } catch (err) {
-      setFormError('Something went wrong during authorization');
+      console.error('Auth submit error:', err);
+      setFormError('Something went wrong. Please try again.');
     } finally {
       setSubmittingAuth(false);
     }
@@ -1147,7 +1151,11 @@ export default function Orders() {
               </div>
 
               {formError && (
-                <p className="text-xs text-rose-500 bg-rose-50 px-3 py-2 rounded-lg font-medium">{formError}</p>
+                <p className={`text-xs px-3 py-2 rounded-lg font-medium ${
+                  formError.startsWith('✅') 
+                    ? 'text-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 dark:text-emerald-300' 
+                    : 'text-rose-500 bg-rose-50 dark:bg-rose-950/30'
+                }`}>{formError}</p>
               )}
 
               <button
