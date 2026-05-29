@@ -131,6 +131,7 @@ export const AuthProvider = ({ children }) => {
 
   // Sign Up method — does NOT touch global loading state
   const signUp = async (email, password, fullName, phone, role = 'customer') => {
+    console.log('[Auth] Initiating sign up for:', email);
     try {
       if (isMockMode) {
         const mockId = `usr_mock_${Math.random().toString(36).substring(2, 11)}`;
@@ -148,9 +149,10 @@ export const AuthProvider = ({ children }) => {
         return { data: { user: newUser }, error: null };
       }
 
-      // Real Supabase Sign Up
+      // Real Supabase Sign Up with 8-second safety timeout
       const siteUrl = import.meta.env.VITE_SITE_URL || window.location.origin;
-      const { data, error } = await supabase.auth.signUp({
+      
+      const signUpPromise = supabase.auth.signUp({
         email,
         password,
         options: {
@@ -159,17 +161,23 @@ export const AuthProvider = ({ children }) => {
         }
       });
 
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Sign up request timed out. Please check your connection.')), 8000)
+      );
+
+      console.log('[Auth] Sending Supabase signUp request...');
+      const { data, error } = await Promise.race([signUpPromise, timeoutPromise]);
+      console.log('[Auth] Supabase signUp response received:', { data, error });
+
       if (error) {
         return { data: null, error: { message: humanizeSupabaseError(error) } };
       }
 
-      // Sync profile table (don't block sign-up if this fails)
+      // Sync profile table in background (redundant but safe, do NOT await to prevent hanging)
       if (data.user) {
-        try {
-          await supabase.from('profiles').upsert({ id: data.user.id, phone, full_name: fullName, role });
-        } catch (e) {
-          console.warn('Profile upsert failed (table may not exist yet):', e);
-        }
+        supabase.from('profiles').upsert({ id: data.user.id, phone, full_name: fullName, role })
+          .then(() => console.log('[Auth] Background profile sync completed.'))
+          .catch((e) => console.warn('[Auth] Background profile sync warning:', e));
       }
 
       // Supabase requires email confirmation (default) — user must confirm before signing in
@@ -185,22 +193,19 @@ export const AuthProvider = ({ children }) => {
       // Email confirmation disabled in Supabase — auto-signed-in
       if (data.session) {
         localStorage.setItem('supabase_auth_token', data.session.access_token);
-        try {
-          await fetchUserProfile(data.user);
-        } catch (e) {
-          setUser(data.user);
-        }
+        fetchUserProfile(data.user).catch(() => {});
       }
 
       return { data, error: null };
     } catch (err) {
-      console.error('Sign up error:', err);
+      console.error('[Auth] Sign up error:', err);
       return { data: null, error: { message: humanizeSupabaseError(err) } };
     }
   };
 
   // Sign In method — does NOT touch global loading state
   const signIn = async (email, password) => {
+    console.log('[Auth] Initiating sign in for:', email);
     try {
       if (isMockMode) {
         let role = 'customer';
@@ -223,16 +228,22 @@ export const AuthProvider = ({ children }) => {
         return { data: { user: loggedInUser }, error: null };
       }
 
-      // Real Supabase Sign In
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      // Real Supabase Sign In with 8-second safety timeout
+      const signInPromise = supabase.auth.signInWithPassword({ email, password });
+      
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Sign in request timed out. Please check your connection.')), 8000)
+      );
+
+      console.log('[Auth] Sending Supabase signIn request...');
+      const { data, error } = await Promise.race([signInPromise, timeoutPromise]);
+      console.log('[Auth] Supabase signIn response received:', { data, error });
 
       if (error) {
         return { data: null, error: { message: humanizeSupabaseError(error) } };
       }
 
       // Auth succeeded — store token immediately and return.
-      // Fire fetchUserProfile in background (don't await) so sign-in
-      // never hangs if the profiles table is slow or unreachable.
       if (data.session) {
         localStorage.setItem('supabase_auth_token', data.session.access_token);
         setUser(data.user); // Set basic user immediately so UI unblocks
@@ -241,7 +252,7 @@ export const AuthProvider = ({ children }) => {
 
       return { data, error: null }; // Always return success if Supabase auth succeeded
     } catch (err) {
-      console.error('Sign in error:', err);
+      console.error('[Auth] Sign in error:', err);
       return { data: null, error: { message: humanizeSupabaseError(err) } };
     }
   };
