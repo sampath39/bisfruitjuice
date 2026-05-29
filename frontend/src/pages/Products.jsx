@@ -67,7 +67,14 @@ export default function Products() {
     fetchProducts();
   }, []);
 
-  const categories = ['All', 'Juices', 'Cool Drinks', 'Water Bottles', 'Ice Creams', 'Cigarettes'];
+  const categories = [
+    { label: 'All',           icon: '🧃' },
+    { label: 'Juices',        icon: '🍊' },
+    { label: 'Cool Drinks',   icon: '🥤' },
+    { label: 'Water Bottles', icon: '💧' },
+    { label: 'Ice Creams',    icon: '🍦' },
+    { label: 'Cigarettes',    icon: '🚬' },
+  ];
 
   // Handle quantity changes per product card
   const handleQuantityChange = (productId, delta) => {
@@ -103,34 +110,40 @@ export default function Products() {
         </p>
       </div>
 
-      {/* Search & Category Filter Controls bar */}
-      <div className="flex flex-col lg:flex-row gap-4 justify-between items-center bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm">
+      {/* Search & Filter Controls */}
+      <div className="flex flex-col gap-4 bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm">
         
         {/* Search input */}
-        <div className="relative w-full lg:max-w-md">
-          <Search className="w-4.5 h-4.5 absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400" />
+        <div className="relative w-full">
+          <Search className="w-5 h-5 absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search fresh juices (e.g. Mango, Avocado)..."
-            className="w-full pl-11 pr-5 py-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 placeholder-slate-400 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+            placeholder="Search juices, shakes, drinks..."
+            className="w-full pl-12 pr-5 py-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 placeholder-slate-400 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
           />
         </div>
 
-        {/* Categories Tab pills */}
-        <div className="flex gap-2 overflow-x-auto w-full lg:w-auto pb-1 lg:pb-0 scrollbar-none">
+        {/* Category Filter Pills */}
+        <div className="flex flex-wrap gap-2.5">
           {categories.map((cat) => (
             <button
-              key={cat}
-              onClick={() => setSelectedCategory(cat)}
-              className={`px-4.5 py-2.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all duration-200 ${
-                selectedCategory === cat
-                  ? 'bg-primary text-white shadow-md'
-                  : 'bg-slate-50 dark:bg-slate-950 text-slate-600 dark:text-slate-350 hover:bg-slate-100 dark:hover:bg-slate-800'
+              key={cat.label}
+              onClick={() => setSelectedCategory(cat.label)}
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-all duration-200 border ${
+                selectedCategory === cat.label
+                  ? 'bg-primary text-white border-primary shadow-lg shadow-green-200/50 dark:shadow-green-900/30 scale-105'
+                  : 'bg-slate-50 dark:bg-slate-950 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-primary/50 hover:text-primary hover:bg-green-50 dark:hover:bg-green-950/20'
               }`}
             >
-              {cat}
+              <span className="text-base leading-none">{cat.icon}</span>
+              <span>{cat.label}</span>
+              {selectedCategory === cat.label && (
+                <span className="bg-white/25 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none">
+                  {cat.label === 'All' ? products.length : products.filter(p => p.category === cat.label && p.is_available).length}
+                </span>
+              )}
             </button>
           ))}
         </div>
