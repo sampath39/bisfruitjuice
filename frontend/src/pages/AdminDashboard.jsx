@@ -220,7 +220,7 @@ export default function AdminDashboard() {
       setLoading(true);
       // Fetch Products
       const prodRes = await api.get('/products');
-      setProductsList(prodRes.data || MOCK_PRODUCTS);
+      setProductsList(prodRes.data || []);
 
       // Fetch Orders
       const orderRes = await api.get('/orders');
@@ -234,8 +234,9 @@ export default function AdminDashboard() {
         setCategoryChart(analyticsRes.data.charts.categoryPopularity);
       }
     } catch (err) {
-      console.warn('API error loading Admin panel, operating in Mock Mode.');
-      setProductsList(MOCK_PRODUCTS);
+      console.error('Failed to load admin dashboard data:', err);
+      showToast('Failed to load dashboard data. Please check backend connection.', 'error');
+      setProductsList([]);
       setOrdersList([]);
     } finally {
       setLoading(false);
@@ -363,17 +364,8 @@ export default function AdminDashboard() {
       }
       setProductModalOpen(false);
     } catch (err) {
-      const mockResult = {
-        id: editingProduct ? editingProduct.id : `mock_p_${Math.random().toString(36).substring(2, 9)}`,
-        ...payload
-      };
-      if (editingProduct) {
-        setProductsList(productsList.map(p => p.id === editingProduct.id ? mockResult : p));
-      } else {
-        setProductsList([mockResult, ...productsList]);
-      }
-      showToast('Local inventory updated (Mock Mode)', 'success');
-      setProductModalOpen(false);
+      console.error('Failed to save product:', err);
+      showToast(err.response?.data?.error || 'Failed to save product. Check backend connection.', 'error');
     }
   };
 
@@ -384,8 +376,8 @@ export default function AdminDashboard() {
       setProductsList(productsList.filter(p => p.id !== id));
       showToast('Product deleted successfully', 'success');
     } catch (err) {
-      setProductsList(productsList.filter(p => p.id !== id));
-      showToast('Deleted from local list (Mock Mode)', 'success');
+      console.error('Failed to delete product:', err);
+      showToast(err.response?.data?.error || 'Failed to delete product.', 'error');
     }
   };
 
@@ -396,32 +388,23 @@ export default function AdminDashboard() {
       showToast(`Order status updated to: ${status.toUpperCase()}`, 'success');
       setOrdersList(ordersList.map(o => o.id === orderId ? res.data.order : o));
     } catch (err) {
-      setOrdersList(ordersList.map(o => o.id === orderId ? { ...o, order_status: status } : o));
-      showToast(`Local order status updated (Mock Mode)`, 'success');
+      console.error('Failed to update order status:', err);
+      showToast(err.response?.data?.error || 'Failed to update order status. Check connection.', 'error');
     }
   };
 
   const handleSendOtp = async (orderId) => {
     try {
       const res = await api.post(`/orders/${orderId}/send-otp`);
-      showToast(`OTP Code sent: ${res.data.otp_code}`, 'success');
+      showToast(`OTP sent to ${res.data.order?.customer_mobile || 'customer mobile'} via SMS ✓`, 'success');
       setOrdersList(ordersList.map(o => o.id === orderId ? res.data.order : o));
       
       // Open verification dialog immediately
       setEnteredOtp('');
       setOtpModalOrder(res.data.order);
     } catch (err) {
-      // Mock flow
-      const mockOtp = Math.floor(1000 + Math.random() * 9000).toString();
-      setOrdersList(ordersList.map(o => 
-        o.id === orderId ? { ...o, order_status: 'otp_pending', otp_code: mockOtp } : o
-      ));
-      showToast(`Mock OTP generated: ${mockOtp}`, 'success');
-      
-      const foundOrder = ordersList.find(o => o.id === orderId);
-      if (foundOrder) {
-        setOtpModalOrder({ ...foundOrder, order_status: 'otp_pending', otp_code: mockOtp });
-      }
+      console.error('Failed to send OTP:', err);
+      showToast(err.response?.data?.error || 'Failed to send OTP. Check your SMS/Twilio config.', 'error');
     }
   };
 
@@ -436,21 +419,8 @@ export default function AdminDashboard() {
       setOrdersList(ordersList.map(o => o.id === otpModalOrder.id ? res.data.order : o));
       setOtpModalOrder(null);
     } catch (err) {
-      if (otpModalOrder.otp_code === enteredOtp) {
-        // Mock fallback success
-        const updated = {
-          ...otpModalOrder,
-          order_status: 'delivered',
-          otp_verified: true,
-          delivered_at: new Date().toISOString(),
-          payment_status: otpModalOrder.payment_method === 'COD' ? 'paid' : otpModalOrder.payment_status
-        };
-        setOrdersList(ordersList.map(o => o.id === otpModalOrder.id ? updated : o));
-        setOtpModalOrder(null);
-        showToast('OTP verified successfully! Order delivered (Mock Mode).', 'success');
-      } else {
-        showToast(err.response?.data?.error || 'Incorrect OTP code. Try again.', 'error');
-      }
+      console.error('OTP verification failed:', err);
+      showToast(err.response?.data?.error || 'Incorrect OTP or server error. Try again.', 'error');
     } finally {
       setVerifyingOtp(false);
     }
@@ -1154,7 +1124,10 @@ export default function AdminDashboard() {
 
             <div className="space-y-1">
               <h3 className="font-semibold text-lg text-slate-900 dark:text-white">Delivery OTP Verification</h3>
-              <p className="text-xs text-slate-500">Enter the 4-digit code provided by customer **{otpModalOrder.customer_name}**</p>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                An OTP was sent via SMS to <strong>{otpModalOrder.customer_mobile}</strong>.<br />
+                Ask the customer for that code and enter it below to confirm delivery.
+              </p>
               {otpModalOrder.payment_method === 'COD' && (
                 <div className="bg-emerald-55/10 dark:bg-emerald-950/20 border border-emerald-500/20 rounded-xl p-2.5 mt-2 animate-fadeIn">
                   <p className="text-[10px] uppercase font-bold text-slate-400">Amount Received / Collect Cash:</p>
@@ -1163,13 +1136,6 @@ export default function AdminDashboard() {
               )}
             </div>
 
-            {/* Developer/Testing Helper note */}
-            {otpModalOrder.otp_code && (
-              <div className="p-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-150 dark:border-slate-800/80 rounded-xl text-[10px] text-slate-450 leading-normal text-left">
-                <span className="font-bold text-amber-600 block uppercase tracking-wider mb-0.5">Mock SMS Gateway Tracker</span>
-                The OTP code dispatched to mobile **{otpModalOrder.customer_mobile}** is **{otpModalOrder.otp_code}**. Use this code for verification.
-              </div>
-            )}
 
             <form onSubmit={handleVerifyOtp} className="space-y-4">
               <input

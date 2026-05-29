@@ -68,8 +68,6 @@ export default function Orders() {
   
   // Order Confirmation State
   const [confirmedOrder, setConfirmedOrder] = useState(null);
-  const [simOtpInput, setSimOtpInput] = useState('');
-  const [simOtpInputs, setSimOtpInputs] = useState({});
   
   // Orders history & tracking
   const [myOrders, setMyOrders] = useState([]);
@@ -336,7 +334,7 @@ export default function Orders() {
       },
       (error) => {
         console.error('Geolocation fetch error:', error);
-        showToast('Failed to fetch your location. Please allow location permission or use simulator buttons.', 'error');
+        showToast('Failed to fetch your location. Please allow location permission and try again.', 'error');
         setCheckingLocation(false);
       },
       { enableHighAccuracy: true, timeout: 8000 }
@@ -568,54 +566,9 @@ export default function Orders() {
         razorpayInstance.open();
       }
     } catch (err) {
-      console.warn('API error placing order, falling back to local interactive simulation mode:', err);
-      showToast('Offline Mode: Simulating checkout flow locally!', 'info');
-
-      // Create a simulated local order
-      const mockOrderId = `ord_sim_${Math.random().toString(36).substring(2, 9)}`;
-      const mockOrder = {
-        id: mockOrderId,
-        customer_name: finalName,
-        customer_mobile: customerPhone,
-        delivery_address: deliveryAddress,
-        latitude: coordinates.lat,
-        longitude: coordinates.lng,
-        distance_km: 0.36,
-        total_amount: finalTotal,
-        payment_method: paymentMethod,
-        payment_status: paymentMethod === 'COD' ? 'NOT PAID' : 'pending',
-        order_status: 'pending',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        order_items: cartItems.map((item, index) => ({
-          id: `item_mock_${index}_${Date.now()}`,
-          quantity: item.quantity,
-          price_at_order: item.price,
-          products: { name: item.name, category: item.category }
-        })),
-        otp_code: null,
-        otp_verified: false
-      };
-
-      if (paymentMethod === 'COD') {
-        showToast('Order confirmed (Simulated COD)! 🎉', 'success');
-        setConfirmedOrder(mockOrder);
-        setMyOrders(prev => [mockOrder, ...prev]);
-        clearCart();
-      } else {
-        // Razorpay mock flow locally
-        showToast('Initiating Simulated Online checkout...', 'info');
-        setTimeout(() => {
-          const paidMockOrder = {
-            ...mockOrder,
-            payment_status: 'paid'
-          };
-          showToast('Payment verified successfully (Simulated)!', 'success');
-          setConfirmedOrder(paidMockOrder);
-          setMyOrders(prev => [paidMockOrder, ...prev]);
-          clearCart();
-        }, 1500);
-      }
+      console.error('Failed to place order:', err);
+      const message = err.response?.data?.error || err.response?.data?.message || 'Failed to place your order. Please check your connection and try again.';
+      showToast(message, 'error');
     } finally {
       setPlacingOrder(false);
     }
@@ -732,76 +685,7 @@ export default function Orders() {
     }
   };
 
-  const simulateTimeline = (orderId) => {
-    console.log('⏰ Local manual timeline controller activated for order:', orderId);
-  };
 
-  const handleUpdateSimulatedStatus = (orderId, newStatus) => {
-    setConfirmedOrder(prev => {
-      if (!prev || prev.id !== orderId) return prev;
-      let updated = { ...prev, order_status: newStatus, updated_at: new Date().toISOString() };
-      if (newStatus === 'otp_pending') {
-        updated.otp_code = '7777';
-        showToast('Mock SMS: Verification OTP code is 7777', 'success');
-      }
-      if (newStatus === 'delivered') {
-        updated.otp_verified = true;
-        updated.payment_status = 'paid';
-        updated.delivered_at = new Date().toISOString();
-      }
-      return updated;
-    });
-
-    setMyOrders(prev => prev.map(o => {
-      if (o.id !== orderId) return o;
-      let updated = { ...o, order_status: newStatus, updated_at: new Date().toISOString() };
-      if (newStatus === 'otp_pending') {
-        updated.otp_code = '7777';
-      }
-      if (newStatus === 'delivered') {
-        updated.otp_verified = true;
-        updated.payment_status = 'paid';
-        updated.delivered_at = new Date().toISOString();
-      }
-      return updated;
-    }));
-
-    showToast(`Simulated status updated to: ${newStatus.toUpperCase()}`, 'info');
-  };
-
-  const handleVerifySimulatedOtp = (orderId, isFromHistoryList = false) => {
-    const codeEntered = isFromHistoryList ? simOtpInputs[orderId] : simOtpInput;
-    const targetOrder = myOrders.find(o => o.id === orderId) || (confirmedOrder?.id === orderId ? confirmedOrder : null);
-    
-    if (!targetOrder) {
-      showToast('Order not found.', 'error');
-      return;
-    }
-    
-    if (codeEntered === targetOrder.otp_code || codeEntered === '7777') {
-      showToast('OTP verified successfully! Order delivered. 🥳', 'success');
-      
-      const updated = {
-        ...targetOrder,
-        order_status: 'delivered',
-        payment_status: 'paid',
-        otp_verified: true,
-        delivered_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      };
-
-      setConfirmedOrder(prev => (prev && prev.id === orderId) ? updated : prev);
-      setMyOrders(prev => prev.map(o => o.id === orderId ? updated : o));
-      
-      if (isFromHistoryList) {
-        setSimOtpInputs(prev => ({ ...prev, [orderId]: '' }));
-      } else {
-        setSimOtpInput('');
-      }
-    } else {
-      showToast('Invalid OTP! Please check the code and try again.', 'error');
-    }
-  };
 
   const getWhatsAppShareLink = (order) => {
     const itemsList = order.order_items?.map(item => `- ${item.products?.name} x ${item.quantity}`).join('%0A') || '';
@@ -964,51 +848,6 @@ export default function Orders() {
             </div>
           </div>
 
-          {/* Mock Offline Simulation Workflow Controller */}
-          {confirmedOrder.id.startsWith('ord_sim_') && !['delivered', 'rejected'].includes(confirmedOrder.order_status) && (
-            <div className="bg-amber-500/5 dark:bg-amber-950/10 border border-amber-500/20 p-5 rounded-2xl text-left space-y-3 animate-fadeIn">
-              <div className="flex items-center justify-between border-b border-amber-500/10 pb-2">
-                <div className="flex items-center gap-2 font-bold text-amber-800 dark:text-amber-300 text-xs uppercase tracking-wider">
-                  <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
-                  Mock Timeline Controller (Manual Mode)
-                </div>
-                <span className="text-[9px] font-extrabold text-amber-600 bg-amber-100 dark:bg-amber-950/30 px-2 py-0.5 rounded-full uppercase">Offline Simulator</span>
-              </div>
-              <p className="text-[10px] text-slate-550 dark:text-slate-400 leading-normal">
-                Because this order is simulated offline, you can manually trigger shop actions below to test how the timeline, notifications, and OTP widgets change!
-              </p>
-              <div className="flex flex-wrap gap-2 pt-1">
-                {confirmedOrder.order_status === 'pending' && (
-                  <>
-                    <button
-                      onClick={() => handleUpdateSimulatedStatus(confirmedOrder.id, 'accepted')}
-                      className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-[10px] rounded-lg transition-all shadow-sm"
-                    >
-                      Simulate Shop Accept
-                    </button>
-                    <button
-                      onClick={() => handleUpdateSimulatedStatus(confirmedOrder.id, 'rejected')}
-                      className="px-3 py-1.5 bg-rose-500 hover:bg-rose-600 text-white font-bold text-[10px] rounded-lg transition-all shadow-sm"
-                    >
-                      Simulate Shop Reject
-                    </button>
-                  </>
-                )}
-                {confirmedOrder.order_status === 'accepted' && (
-                  <button
-                    onClick={() => handleUpdateSimulatedStatus(confirmedOrder.id, 'otp_pending')}
-                    className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white font-bold text-[10px] rounded-lg transition-all shadow-sm"
-                  >
-                    Simulate Driver Send OTP
-                  </button>
-                )}
-                {confirmedOrder.order_status === 'otp_pending' && (
-                  <span className="text-[10px] font-semibold text-slate-400">Use the OTP input box below to verify code & complete delivery!</span>
-                )}
-              </div>
-            </div>
-          )}
-
           {confirmedOrder.order_status === 'rejected' && (
             <div className="bg-rose-500/5 dark:bg-rose-950/10 border border-rose-500/25 p-5 rounded-2xl text-left space-y-2.5 animate-fadeIn">
               <div className="flex items-center gap-2 font-bold text-rose-800 dark:text-rose-400">
@@ -1036,41 +875,23 @@ export default function Orders() {
             </div>
           )}
 
-          {confirmedOrder.order_status === 'otp_pending' && confirmedOrder.otp_code && (
-            <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-250/25 p-4.5 rounded-2xl flex flex-col gap-2.5 text-xs text-left animate-fadeIn">
+          {confirmedOrder.order_status === 'otp_pending' && (
+            <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-300/30 p-4.5 rounded-2xl flex flex-col gap-3 text-xs text-left animate-fadeIn">
               <div className="flex items-center gap-2 font-bold text-amber-800 dark:text-amber-300">
-                <Lock className="w-4.5 h-4.5 shrink-0 text-amber-500" />
-                <span className="text-sm">Verify Delivery via OTP</span>
+                <Smartphone className="w-4.5 h-4.5 shrink-0 text-amber-500" />
+                <span className="text-sm">Delivery OTP Sent!</span>
               </div>
-              <p className="text-slate-655 dark:text-slate-400 leading-relaxed text-xs">
-                Provide the 4-digit code below to the delivery partner to verify checkout & close transaction.
+              <p className="text-slate-600 dark:text-slate-400 leading-relaxed">
+                A 4-digit verification code has been sent to your registered mobile number
+                <strong className="text-slate-800 dark:text-slate-200"> {confirmedOrder.customer_mobile}</strong>.
               </p>
-              <div className="flex items-center gap-2 bg-white dark:bg-slate-900 border border-amber-200/40 p-2.5 rounded-xl w-fit">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">SMS Simulator OTP:</span>
-                <span className="font-mono text-base font-extrabold text-amber-600 dark:text-amber-400 tracking-widest">{confirmedOrder.otp_code}</span>
+              <div className="bg-amber-100/60 dark:bg-amber-950/40 border border-amber-200/50 rounded-xl p-3 flex items-start gap-2.5">
+                <span className="text-amber-600 font-extrabold text-base mt-0.5">📲</span>
+                <p className="text-amber-800 dark:text-amber-300 font-semibold text-[11px] leading-relaxed">
+                  When our delivery partner arrives, <strong>tell them the OTP from your SMS</strong>.
+                  They will enter it to confirm delivery and complete the transaction.
+                </p>
               </div>
-              {confirmedOrder.id.startsWith('ord_sim_') && (
-                <div className="mt-2.5 pt-3 border-t border-amber-200/30 flex flex-col gap-2">
-                  <span className="text-[10px] font-bold text-amber-850 dark:text-amber-300 uppercase">Self-Verify Mock Delivery:</span>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      maxLength="4"
-                      placeholder="Enter 4-digit OTP"
-                      value={simOtpInput}
-                      onChange={(e) => setSimOtpInput(e.target.value.replace(/\D/g, ''))}
-                      className="w-32 px-3 py-2 rounded-lg border border-amber-200 bg-white dark:bg-slate-900 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary text-slate-850 dark:text-slate-100"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => handleVerifySimulatedOtp(confirmedOrder.id)}
-                      className="bg-primary hover:bg-green-600 text-white text-xs font-bold px-4 py-2 rounded-lg transition-colors"
-                    >
-                      Verify OTP
-                    </button>
-                  </div>
-                </div>
-              )}
             </div>
           )}
 
@@ -1608,42 +1429,17 @@ export default function Orders() {
                           </div>
                         </div>
 
-                        {/* OTP Verification Alert (Mock SMS receiver) */}
-                        {order.order_status === 'otp_pending' && order.otp_code && (
+                        {/* OTP Verification Alert */}
+                        {order.order_status === 'otp_pending' && (
                           <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-250/25 p-4 rounded-xl flex flex-col gap-2.5 text-xs">
                             <div className="flex items-center gap-2 font-bold text-amber-800 dark:text-amber-300">
-                              <Lock className="w-4 h-4 shrink-0 text-amber-500" />
-                              <span>Verify Delivery via OTP</span>
+                              <Smartphone className="w-4 h-4 shrink-0 text-amber-500" />
+                              <span>Delivery OTP Sent!</span>
                             </div>
                             <p className="text-slate-650 dark:text-slate-400 leading-relaxed text-[11px]">
-                              Provide the 4-digit code below to the delivery partner to verify checkout & close transaction.
+                              A 4-digit code was sent to your mobile <strong>{order.customer_mobile}</strong>.
+                              When our delivery partner arrives, <strong>tell them the OTP from your SMS</strong>.
                             </p>
-                            <div className="flex items-center gap-2 bg-white dark:bg-slate-900 border border-amber-200/40 p-2.5 rounded-lg w-fit">
-                              <span className="text-[9px] font-bold text-slate-450 uppercase tracking-wider">SMS Simulator OTP:</span>
-                              <span className="font-mono text-sm font-extrabold text-amber-600 dark:text-amber-400 tracking-widest">{order.otp_code}</span>
-                            </div>
-                            {order.id.startsWith('ord_sim_') && (
-                              <div className="mt-2 pt-2.5 border-t border-amber-200/30 flex flex-col gap-1.5">
-                                <span className="text-[9px] font-bold text-amber-850 dark:text-amber-300 uppercase">Self-Verify Mock Delivery:</span>
-                                <div className="flex gap-2">
-                                  <input
-                                    type="text"
-                                    maxLength="4"
-                                    placeholder="Enter 4-digit OTP"
-                                    value={simOtpInputs[order.id] || ''}
-                                    onChange={(e) => setSimOtpInputs(prev => ({ ...prev, [order.id]: e.target.value.replace(/\D/g, '') }))}
-                                    className="w-28 px-2.5 py-1.5 rounded-lg border border-amber-200 bg-white dark:bg-slate-900 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary text-slate-850 dark:text-slate-100"
-                                  />
-                                  <button
-                                    type="button"
-                                    onClick={() => handleVerifySimulatedOtp(order.id, true)}
-                                    className="bg-primary hover:bg-green-600 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg transition-colors"
-                                  >
-                                    Verify
-                                  </button>
-                                </div>
-                              </div>
-                            )}
                           </div>
                         )}
 
