@@ -5,12 +5,16 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+const keyId = process.env.RAZORPAY_KEY_ID || process.env.Test_api_key || 'rzp_test_placeholder';
+const keySecret = process.env.RAZORPAY_KEY_SECRET || process.env.Test_Key_Secret || 'placeholder_secret';
+const isRazorpayMock = keyId === 'rzp_test_placeholder';
+
 let razorpay;
 try {
   // Initialize Razorpay SDK
   razorpay = new Razorpay({
-    key_id: process.env.RAZORPAY_KEY_ID || 'rzp_test_placeholder',
-    key_secret: process.env.RAZORPAY_KEY_SECRET || 'placeholder_secret'
+    key_id: keyId,
+    key_secret: keySecret
   });
 } catch (err) {
   console.error('Failed to initialize Razorpay SDK:', err);
@@ -39,7 +43,7 @@ export const createRazorpayOrder = async (req, res) => {
     const amountInPaise = Math.round(parseFloat(order.total_amount) * 100);
 
     // If Razorpay keys are placeholders, run in mock mode
-    if (!process.env.RAZORPAY_KEY_ID || process.env.RAZORPAY_KEY_ID === 'rzp_test_placeholder') {
+    if (isRazorpayMock) {
       console.log('Razorpay is running in Mock Mode. Returning dummy Razorpay details.');
       
       const mockRazorpayOrderId = `order_mock_${Math.random().toString(36).substring(2, 11)}`;
@@ -80,7 +84,7 @@ export const createRazorpayOrder = async (req, res) => {
 
     res.json({
       isMock: false,
-      key: process.env.RAZORPAY_KEY_ID,
+      key: keyId,
       amount: rzpOrder.amount,
       currency: rzpOrder.currency,
       id: rzpOrder.id,
@@ -148,7 +152,7 @@ export const verifyRazorpayPayment = async (req, res) => {
     }
 
     // Verify signature using Crypto
-    const secret = process.env.RAZORPAY_KEY_SECRET || 'placeholder_secret';
+    const secret = keySecret;
     const body = razorpay_order_id + '|' + razorpay_payment_id;
     const expectedSignature = crypto
       .createHmac('sha256', secret)
