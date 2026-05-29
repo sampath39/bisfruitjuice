@@ -738,7 +738,7 @@ export default function Orders() {
   const simulateTimeline = (orderId) => {
     console.log('⏰ Starting local timeline simulation for order:', orderId);
     
-    const statuses = ['accepted', 'preparing', 'out_for_delivery', 'otp_pending'];
+    const statuses = ['accepted', 'otp_pending'];
     
     statuses.forEach((status, index) => {
       setTimeout(() => {
@@ -809,7 +809,7 @@ export default function Orders() {
   };
 
   const getOrderStatusStep = (status) => {
-    const steps = ['pending', 'accepted', 'preparing', 'out_for_delivery', 'otp_pending', 'delivered'];
+    const steps = ['pending', 'accepted', 'otp_pending', 'delivered'];
     return steps.indexOf(status);
   };
 
@@ -949,7 +949,7 @@ export default function Orders() {
           </div>
 
           {/* Live Progress Timeline inside Confirmation Receipt */}
-          {['pending', 'accepted', 'preparing', 'out_for_delivery'].includes(confirmedOrder.order_status) && (
+          {['pending', 'accepted'].includes(confirmedOrder.order_status) && (
             <div className="bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200/20 p-4 rounded-2xl flex items-center gap-2.5 text-xs text-blue-750 dark:text-blue-350 text-left animate-fadeIn">
               <Clock className="w-5 h-5 shrink-0 animate-spin-slow text-primary" />
               <div>
@@ -1009,8 +1009,6 @@ export default function Orders() {
               {[
                 { key: 'pending', label: 'Order Placed', desc: 'Received by Bismilla shop' },
                 { key: 'accepted', label: 'Accepted by Shop', desc: 'Confirmed by Imran' },
-                { key: 'preparing', label: 'Preparing Juice', desc: 'Fresh fruits blending now' },
-                { key: 'out_for_delivery', label: 'Out for Delivery', desc: 'Partner on the way' },
                 { key: 'otp_pending', label: 'OTP Verification', desc: 'Tell OTP to partner' },
                 { key: 'delivered', label: 'Delivered', desc: 'Enjoy your fresh juice!' }
               ].map((step, idx) => {
@@ -1021,7 +1019,7 @@ export default function Orders() {
 
                 return (
                   <div key={step.key} className="flex gap-3.5 text-xs relative">
-                    {idx < 5 && (
+                    {idx < 3 && (
                       <div className={`w-0.5 absolute left-[8px] top-[18px] bottom-[-22px] -z-10 ${
                         idx < currentStep ? 'bg-primary' : 'bg-slate-200 dark:bg-slate-800'
                       }`} />
@@ -1380,10 +1378,10 @@ export default function Orders() {
               </div>
             )}
 
-            {/* TRACK ACTIVE ORDERS */}
+            {/* MY ORDERS HISTORY */}
             <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm space-y-6">
               <div className="flex justify-between items-center pb-2 border-b border-slate-50 dark:border-slate-800">
-                <h3 className="font-semibold text-slate-800 dark:text-white text-base">Track Active Orders</h3>
+                <h3 className="font-semibold text-slate-800 dark:text-white text-base">My Orders</h3>
                 <span className="text-[10px] text-slate-400 font-bold bg-slate-50 dark:bg-slate-950 px-2 py-0.5 rounded-full uppercase">Realtime Live</span>
               </div>
 
@@ -1393,7 +1391,7 @@ export default function Orders() {
                 </div>
               ) : myOrders.length === 0 ? (
                 <p className="text-xs text-slate-500 text-center py-6">
-                  No orders placed in this session. Complete checkout above!
+                  No orders placed yet. Complete checkout above!
                 </p>
               ) : (
                 <div className="space-y-8 max-h-[600px] overflow-y-auto pr-1">
@@ -1401,14 +1399,12 @@ export default function Orders() {
                     const currentStep = getOrderStatusStep(order.order_status);
                     
                     // Show ETA countdown if status is between pending and otp_pending
-                    const showETA = ['pending', 'accepted', 'preparing', 'out_for_delivery'].includes(order.order_status);
+                    const showETA = ['pending', 'accepted'].includes(order.order_status);
 
                     // Steps array for the timeline
                     const steps = [
                       { key: 'pending', label: 'Order Placed', desc: 'Received by Bismilla shop' },
                       { key: 'accepted', label: 'Accepted by Shop', desc: 'Confirmed by Imran' },
-                      { key: 'preparing', label: 'Preparing Juice', desc: 'Fresh fruits blending now' },
-                      { key: 'out_for_delivery', label: 'Out for Delivery', desc: 'Partner on the way' },
                       { key: 'otp_pending', label: 'OTP Verification', desc: 'Tell OTP to partner' },
                       { key: 'delivered', label: 'Delivered', desc: 'Enjoy your fresh juice!' }
                     ];

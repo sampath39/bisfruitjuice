@@ -501,17 +501,15 @@ export default function AdminDashboard() {
     return customers;
   };
 
-  // Mappings for the 10 Filter Sections
+  // Mappings for the Filter Sections
   const getFilteredOrders = () => {
     switch (activeTab) {
       case 'pending':
         return ordersList.filter(o => o.order_status === 'pending');
       case 'accepted':
         return ordersList.filter(o => o.order_status === 'accepted');
-      case 'preparing':
-        return ordersList.filter(o => o.order_status === 'preparing');
-      case 'out_for_delivery':
-        return ordersList.filter(o => o.order_status === 'out_for_delivery' || o.order_status === 'otp_pending');
+      case 'otp_pending':
+        return ordersList.filter(o => o.order_status === 'otp_pending');
       case 'delivered':
         return ordersList.filter(o => o.order_status === 'delivered');
       case 'cod_pending':
@@ -532,8 +530,7 @@ export default function AdminDashboard() {
     { section: 'ACTIVE ORDERS', items: [
       { id: 'pending', label: 'Pending Orders', count: ordersList.filter(o => o.order_status === 'pending').length, icon: <Clock className="w-4 h-4" /> },
       { id: 'accepted', label: 'Accepted Orders', count: ordersList.filter(o => o.order_status === 'accepted').length, icon: <ThumbsUp className="w-4 h-4" /> },
-      { id: 'preparing', label: 'Preparing Orders', count: ordersList.filter(o => o.order_status === 'preparing').length, icon: <Loader className="w-4 h-4" /> },
-      { id: 'out_for_delivery', label: 'Out for Delivery', count: ordersList.filter(o => ['out_for_delivery', 'otp_pending'].includes(o.order_status)).length, icon: <Truck className="w-4 h-4" /> }
+      { id: 'otp_pending', label: 'OTP Verification Orders', count: ordersList.filter(o => o.order_status === 'otp_pending').length, icon: <Smartphone className="w-4 h-4" /> }
     ]},
     { section: 'ARCHIVE & PAYMENTS', items: [
       { id: 'delivered', label: 'Delivered Orders', icon: <CheckCircle2 className="w-4 h-4" /> },
@@ -1032,22 +1029,6 @@ export default function AdminDashboard() {
                             </>
                           )}
                           {order.order_status === 'accepted' && (
-                            <button
-                              onClick={() => handleOrderStatusUpdate(order.id, 'preparing')}
-                              className="bg-indigo-500 text-white font-bold text-[10px] px-3 py-1.5 rounded-lg"
-                            >
-                              Prepare
-                            </button>
-                          )}
-                          {order.order_status === 'preparing' && (
-                            <button
-                              onClick={() => handleOrderStatusUpdate(order.id, 'out_for_delivery')}
-                              className="bg-orange-500 text-white font-bold text-[10px] px-3 py-1.5 rounded-lg"
-                            >
-                              Dispatch
-                            </button>
-                          )}
-                          {order.order_status === 'out_for_delivery' && (
                             <button
                               onClick={() => handleSendOtp(order.id)}
                               className="bg-purple-600 text-white font-bold text-[10px] px-3 py-1.5 rounded-lg"
