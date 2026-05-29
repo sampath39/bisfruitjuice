@@ -1,6 +1,7 @@
 import { supabase, isMockMode } from '../config/db.js';
 import dotenv from 'dotenv';
 import axios from 'axios';
+import { broadcast } from '../config/websocket.js';
 
 dotenv.config();
 
@@ -198,6 +199,7 @@ export const createOrder = async (req, res) => {
       };
       
       inMemoryOrders.unshift(mockOrder);
+      broadcast({ type: 'NEW_ORDER', order: mockOrder });
       return res.status(201).json({
         message: 'Order created successfully (Mock Mode)',
         order: mockOrder
@@ -235,9 +237,32 @@ export const createOrder = async (req, res) => {
       throw itemsError;
     }
 
+    // Fetch full order details (items + products) for broadcasting and frontend consistency
+    const { data: fullOrder } = await supabase
+      .from('orders')
+      .select(`
+        *,
+        order_items (
+          id,
+          quantity,
+          price_at_order,
+          products (
+            id,
+            name,
+            image_url,
+            category
+          )
+        )
+      `)
+      .eq('id', order.id)
+      .single();
+
+    const orderToReturn = fullOrder || order;
+    broadcast({ type: 'NEW_ORDER', order: orderToReturn });
+
     res.status(201).json({
       message: 'Order created successfully',
-      order
+      order: orderToReturn
     });
   } catch (err) {
     console.error('Error creating order:', err);
@@ -324,13 +349,18 @@ export const updateOrderStatus = async (req, res) => {
       const idx = inMemoryOrders.findIndex(o => o.id === id);
       if (idx === -1) return res.status(404).json({ error: 'Order not found' });
       
-      if (order_status) inMemoryOrders[idx].order_status = order_status;
+      if (order_status) {
+        inMemoryOrders[idx].order_status = order_status;
+        if (order_status === 'accepted') inMemoryOrders[idx].accepted_at = new Date().toISOString();
+        if (order_status === 'delivered') inMemoryOrders[idx].delivered_at = new Date().toISOString();
+      }
       if (payment_status) inMemoryOrders[idx].payment_status = payment_status;
 
       if (order_status === 'delivered' && inMemoryOrders[idx].payment_method === 'COD') {
         inMemoryOrders[idx].payment_status = 'paid';
       }
 
+      broadcast({ type: 'ORDER_UPDATED', order: inMemoryOrders[idx] });
       return res.json({ message: 'Order updated successfully (Mock Mode)', order: inMemoryOrders[idx] });
     }
 
@@ -339,7 +369,11 @@ export const updateOrderStatus = async (req, res) => {
     }
 
     const updateData = { updated_at: new Date().toISOString() };
-    if (order_status) updateData.order_status = order_status;
+    if (order_status) {
+      updateData.order_status = order_status;
+      if (order_status === 'accepted') updateData.accepted_at = new Date().toISOString();
+      if (order_status === 'delivered') updateData.delivered_at = new Date().toISOString();
+    }
     if (payment_status) updateData.payment_status = payment_status;
 
     if (order_status === 'delivered') {
@@ -358,16 +392,204 @@ export const updateOrderStatus = async (req, res) => {
       .from('orders')
       .update(updateData)
       .eq('id', id)
-      .select()
+      .select(`
+        *,
+        order_items (
+          id,
+          quantity,
+          price_at_order,
+          products (
+            id,
+            name,
+            image_url,
+            category
+          )
+        )
+      `)
       .single();
 
     if (error) throw error;
+    
+    broadcast({ type: 'ORDER_UPDATED', order: updatedOrder });
     res.json({ message: 'Order updated successfully', order: updatedOrder });
   } catch (err) {
     console.error('Error updating order status:', err);
     res.status(500).json({ error: 'Failed to update order status' });
   }
 };
+
+// Admin: Send delivery OTP
+export const sendDeliveryOTP = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const otp = Math.floor(1000 + Math.random() * 9000).toString();
+
+    if (isMockMode) {
+      const idx = inMemoryOrders.findIndex(o => o.id === id);
+      if (idx === -1) return res.status(404).json({ error: 'Order not found' });
+
+      inMemoryOrders[idx].order_status = 'otp_pending';
+      inMemoryOrders[idx].otp_code = otp;
+      inMemoryOrders[idx].updated_at = new Date().toISOString();
+
+      console.log(`\n======================================================`);
+      console.log(`💬 [SMS/WhatsApp Simulator] Sending OTP code to customer:`);
+      console.log(`📲 Mobile: ${inMemoryOrders[idx].customer_mobile}`);
+      console.log(`🔑 OTP Code: ${otp}`);
+      console.log(`======================================================\n`);
+
+      broadcast({ type: 'ORDER_UPDATED', order: inMemoryOrders[idx] });
+      return res.json({ 
+        message: 'OTP sent successfully (Mock Mode)', 
+        order: inMemoryOrders[idx],
+        otp_code: otp
+      });
+    }
+
+    const { data: order, error: findError } = await supabase
+      .from('orders')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (findError || !order) return res.status(404).json({ error: 'Order not found' });
+
+    const { data: updatedOrder, error } = await supabase
+      .from('orders')
+      .update({
+        order_status: 'otp_pending',
+        otp_code: otp,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id)
+      .select(`
+        *,
+        order_items (
+          id,
+          quantity,
+          price_at_order,
+          products (
+            id,
+            name,
+            image_url,
+            category
+          )
+        )
+      `)
+      .single();
+
+    if (error) throw error;
+
+    console.log(`\n======================================================`);
+    console.log(`💬 [SMS/WhatsApp Simulator] Sending OTP code to customer:`);
+    console.log(`📲 Mobile: ${order.customer_mobile}`);
+    console.log(`🔑 OTP Code: ${otp}`);
+    console.log(`======================================================\n`);
+
+    broadcast({ type: 'ORDER_UPDATED', order: updatedOrder });
+    
+    res.json({ 
+      message: 'OTP sent successfully', 
+      order: updatedOrder,
+      otp_code: otp 
+    });
+  } catch (err) {
+    console.error('Error sending delivery OTP:', err);
+    res.status(500).json({ error: 'Failed to send delivery OTP' });
+  }
+};
+
+// Admin: Verify delivery OTP
+export const verifyDeliveryOTP = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { otp } = req.body;
+
+    if (!otp) {
+      return res.status(400).json({ error: 'OTP is required' });
+    }
+
+    if (isMockMode) {
+      const idx = inMemoryOrders.findIndex(o => o.id === id);
+      if (idx === -1) return res.status(404).json({ error: 'Order not found' });
+
+      if (inMemoryOrders[idx].otp_code !== otp) {
+        return res.status(400).json({ error: 'Invalid OTP code. Please check and try again.' });
+      }
+
+      inMemoryOrders[idx].order_status = 'delivered';
+      inMemoryOrders[idx].otp_verified = true;
+      inMemoryOrders[idx].delivered_at = new Date().toISOString();
+      inMemoryOrders[idx].updated_at = new Date().toISOString();
+      
+      if (inMemoryOrders[idx].payment_method === 'COD') {
+        inMemoryOrders[idx].payment_status = 'paid';
+      }
+
+      broadcast({ type: 'ORDER_UPDATED', order: inMemoryOrders[idx] });
+      return res.json({ 
+        message: 'OTP verified and order delivered successfully (Mock Mode)', 
+        order: inMemoryOrders[idx] 
+      });
+    }
+
+    const { data: order, error: findError } = await supabase
+      .from('orders')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (findError || !order) return res.status(404).json({ error: 'Order not found' });
+
+    if (order.otp_code !== otp) {
+      return res.status(400).json({ error: 'Invalid OTP code. Please check and try again.' });
+    }
+
+    const updatePayload = {
+      order_status: 'delivered',
+      otp_verified: true,
+      delivered_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+
+    if (order.payment_method === 'COD') {
+      updatePayload.payment_status = 'paid';
+    }
+
+    const { data: updatedOrder, error } = await supabase
+      .from('orders')
+      .update(updatePayload)
+      .eq('id', id)
+      .select(`
+        *,
+        order_items (
+          id,
+          quantity,
+          price_at_order,
+          products (
+            id,
+            name,
+            image_url,
+            category
+          )
+        )
+      `)
+      .single();
+
+    if (error) throw error;
+
+    broadcast({ type: 'ORDER_UPDATED', order: updatedOrder });
+    
+    res.json({ 
+      message: 'OTP verified and order delivered successfully', 
+      order: updatedOrder 
+    });
+  } catch (err) {
+    console.error('Error verifying delivery OTP:', err);
+    res.status(500).json({ error: 'Failed to verify delivery OTP' });
+  }
+};
+
 
 // Admin: Dashboard Analytics
 export const getAdminAnalytics = async (req, res) => {

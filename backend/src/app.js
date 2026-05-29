@@ -52,12 +52,16 @@ app.use((err, req, res, next) => {
   });
 });
 
+import { initWebSocket } from './config/websocket.js';
+
 // Start Server
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`\n======================================================`);
   console.log(`🚀 BISMILLA FRUIT JUICE SERVER LISTENING ON PORT ${PORT}`);
   console.log(`🔗 API Base Url: http://localhost:${PORT}`);
   console.log(`======================================================\n`);
 });
+
+initWebSocket(server);
 
 export default app;

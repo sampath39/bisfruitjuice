@@ -87,9 +87,13 @@ CREATE TABLE public.orders (
     total_amount NUMERIC(10,2) NOT NULL,
     payment_method TEXT NOT NULL CHECK (payment_method IN ('COD', 'Razorpay')),
     payment_status TEXT DEFAULT 'pending' CHECK (payment_status IN ('pending', 'paid', 'failed')),
-    order_status TEXT DEFAULT 'pending' CHECK (order_status IN ('pending', 'preparing', 'out_for_delivery', 'delivered')),
+    order_status TEXT DEFAULT 'pending' CHECK (order_status IN ('pending', 'accepted', 'preparing', 'out_for_delivery', 'otp_pending', 'delivered', 'rejected')),
     payment_id TEXT, -- Razorpay Payment ID
     razorpay_order_id TEXT,
+    otp_code TEXT,
+    otp_verified BOOLEAN DEFAULT FALSE,
+    accepted_at TIMESTAMP WITH TIME ZONE,
+    delivered_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );

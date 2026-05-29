@@ -5,7 +5,9 @@ import {
   getAllOrders, 
   updateOrderStatus, 
   getAdminAnalytics,
-  verifyDeliveryDistance
+  verifyDeliveryDistance,
+  sendDeliveryOTP,
+  verifyDeliveryOTP
 } from '../controllers/orderController.js';
 import { requireAuth, requireAdmin } from '../middleware/authMiddleware.js';
 
@@ -19,6 +21,8 @@ router.get('/my', requireAuth, getMyOrders);
 // Admin-only routes
 router.get('/', requireAdmin, getAllOrders);
 router.put('/:id', requireAdmin, updateOrderStatus);
+router.post('/:id/send-otp', requireAdmin, sendDeliveryOTP);
+router.post('/:id/verify-otp', requireAdmin, verifyDeliveryOTP);
 router.get('/analytics', requireAdmin, getAdminAnalytics);
 
 export default router;

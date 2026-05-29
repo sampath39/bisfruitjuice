@@ -19,7 +19,9 @@ import {
   Check,
   ClipboardList,
   LogOut,
-  X
+  X,
+  Truck,
+  ThumbsUp
 } from 'lucide-react';
 import api from '../utils/api.js';
 import { calculateDistance, SHOP_LOCATION, reverseGeocode } from '../utils/location.js';
@@ -111,6 +113,90 @@ export default function Orders() {
       // In guest mode, still try to load in-memory orders placed in current session
       fetchMyOrders();
     }
+  }, [user]);
+
+  // Real-time WebSocket Order Updates Syncing
+  useEffect(() => {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const defaultHost = window.location.hostname === 'localhost' ? 'localhost:5000' : window.location.host;
+    const apiHost = import.meta.env.VITE_API_URL 
+      ? import.meta.env.VITE_API_URL.replace(/^http(s)?:\/\//, '').split('/')[0]
+      : defaultHost;
+      
+    const socketUrl = `${protocol}//${apiHost}`;
+    console.log('🔌 Connecting to WebSocket:', socketUrl);
+    
+    let ws;
+    let reconnectTimeout;
+
+    const connect = () => {
+      ws = new WebSocket(socketUrl);
+
+      ws.onopen = () => {
+        console.log('🔌 WebSocket Connected successfully!');
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          
+          if (data.type === 'ORDER_UPDATED') {
+            const updated = data.order;
+            
+            // Check if order exists in myOrders
+            setMyOrders((prev) => {
+              const exists = prev.some(o => o.id === updated.id);
+              if (exists) {
+                showToast(`Order #${updated.id.substring(0, 8)} status: ${updated.order_status.replace(/_/g, ' ').toUpperCase()}`, 'info');
+                return prev.map(o => o.id === updated.id ? updated : o);
+              }
+              // If guest placed order, they might not be authenticated but order is in memory
+              const isGuestToken = localStorage.getItem('supabase_auth_token')?.startsWith('mock_token_jwt_customer');
+              if (isGuestToken || !user) {
+                return prev.map(o => o.id === updated.id ? updated : o);
+              }
+              return prev;
+            });
+
+            // Also check if matches currently open tracking modal/confirmation
+            setConfirmedOrder((prev) => {
+              if (prev && prev.id === updated.id) {
+                return updated;
+              }
+              return prev;
+            });
+          }
+          
+          if (data.type === 'NEW_ORDER') {
+            const isMyOrder = user ? (data.order.user_id === user.id) : true;
+            if (isMyOrder) {
+              setMyOrders((prev) => {
+                const exists = prev.some(o => o.id === data.order.id);
+                if (exists) return prev;
+                return [data.order, ...prev];
+              });
+            }
+          }
+        } catch (err) {
+          console.error('Error handling WS message:', err);
+        }
+      };
+
+      ws.onclose = () => {
+        reconnectTimeout = setTimeout(connect, 3000);
+      };
+
+      ws.onerror = (err) => {
+        ws.close();
+      };
+    };
+
+    connect();
+
+    return () => {
+      clearTimeout(reconnectTimeout);
+      if (ws) ws.close();
+    };
   }, [user]);
 
   const fetchMyOrders = async () => {
@@ -394,7 +480,7 @@ export default function Orders() {
   };
 
   const getOrderStatusStep = (status) => {
-    const steps = ['pending', 'preparing', 'out_for_delivery', 'delivered'];
+    const steps = ['pending', 'accepted', 'preparing', 'out_for_delivery', 'otp_pending', 'delivered'];
     return steps.indexOf(status);
   };
 
@@ -807,7 +893,10 @@ export default function Orders() {
 
             {/* TRACK ACTIVE ORDERS */}
             <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm space-y-6">
-              <h3 className="font-semibold text-slate-800 dark:text-white text-base">Track Active Orders</h3>
+              <div className="flex justify-between items-center pb-2 border-b border-slate-50 dark:border-slate-800">
+                <h3 className="font-semibold text-slate-800 dark:text-white text-base">Track Active Orders</h3>
+                <span className="text-[10px] text-slate-400 font-bold bg-slate-50 dark:bg-slate-950 px-2 py-0.5 rounded-full uppercase">Realtime Live</span>
+              </div>
 
               {loadingOrders ? (
                 <div className="flex justify-center items-center py-6">
@@ -818,62 +907,155 @@ export default function Orders() {
                   No orders placed in this session. Complete checkout above!
                 </p>
               ) : (
-                <div className="space-y-6 max-h-[500px] overflow-y-auto pr-1">
-                  {myOrders.map((order) => (
-                    <div 
-                      key={order.id} 
-                      className="border border-slate-100 dark:border-slate-800 p-4 rounded-2xl bg-slate-55 dark:bg-slate-950/20 space-y-4"
-                    >
-                      <div className="flex justify-between items-start text-xs">
-                        <div>
-                          <p className="font-bold text-slate-850 dark:text-slate-200">ID: #{order.id.substring(0, 8)}</p>
-                          <p className="text-[10px] text-slate-450 mt-0.5">{new Date(order.created_at).toLocaleDateString()}</p>
-                        </div>
-                        <span className={`px-2.5 py-0.5 rounded text-[10px] font-bold uppercase ${
-                          order.payment_status === 'paid' 
-                            ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700' 
-                            : 'bg-amber-100 dark:bg-amber-950 text-amber-700'
-                        }`}>
-                          {order.payment_status}
-                        </span>
-                      </div>
+                <div className="space-y-8 max-h-[600px] overflow-y-auto pr-1">
+                  {myOrders.map((order) => {
+                    const currentStep = getOrderStatusStep(order.order_status);
+                    
+                    // Show ETA countdown if status is between pending and otp_pending
+                    const showETA = ['pending', 'accepted', 'preparing', 'out_for_delivery'].includes(order.order_status);
 
-                      <div className="space-y-2 pt-1">
-                        <div className="flex justify-between items-center text-[10px] font-semibold text-slate-650 dark:text-slate-400 capitalize">
-                          <span>Status: {order.order_status.replace(/_/g, ' ')}</span>
-                          <span className="font-bold text-slate-800 dark:text-slate-200">₹{order.total_amount}</span>
-                        </div>
-                        
-                        {/* Timeline bars */}
-                        <div className="flex gap-1.5 h-1.5 w-full bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
-                          {['pending', 'preparing', 'out_for_delivery', 'delivered'].map((status, index) => {
-                            const activeIndex = getOrderStatusStep(order.order_status);
-                            const isActive = index <= activeIndex;
+                    // Steps array for the timeline
+                    const steps = [
+                      { key: 'pending', label: 'Order Placed', desc: 'Received by Bismilla shop' },
+                      { key: 'accepted', label: 'Accepted by Shop', desc: 'Confirmed by Imran' },
+                      { key: 'preparing', label: 'Preparing Juice', desc: 'Fresh fruits blending now' },
+                      { key: 'out_for_delivery', label: 'Out for Delivery', desc: 'Partner on the way' },
+                      { key: 'otp_pending', label: 'OTP Verification', desc: 'Tell OTP to partner' },
+                      { key: 'delivered', label: 'Delivered', desc: 'Enjoy your fresh juice!' }
+                    ];
 
-                            return (
-                              <div
-                                key={status}
-                                className={`h-full flex-1 rounded-full ${
-                                  isActive
-                                    ? 'bg-gradient-to-r from-primary to-emerald-400'
-                                    : 'bg-transparent'
-                                }`}
-                              />
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                      <a
-                        href={getWhatsAppShareLink(order)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="w-full bg-green-55 hover:bg-green-100 text-green-700 dark:text-green-400 dark:bg-green-950/20 py-2 rounded-xl text-center text-[10px] font-semibold flex items-center justify-center gap-1.5 border border-green-200/20 transition-colors"
+                    return (
+                      <div 
+                        key={order.id} 
+                        className="border border-slate-100 dark:border-slate-800 p-5 rounded-2xl bg-slate-55 dark:bg-slate-950/20 space-y-4 shadow-sm"
                       >
-                        <Share2 className="w-3.5 h-3.5" /> WhatsApp Confirmation
-                      </a>
-                    </div>
-                  ))}
+                        {/* Order Header */}
+                        <div className="flex justify-between items-start text-xs border-b border-slate-100 dark:border-slate-850 pb-3">
+                          <div>
+                            <p className="font-mono font-bold text-slate-850 dark:text-slate-200 text-sm">#{order.id.substring(0, 8)}</p>
+                            <p className="text-[9px] text-slate-450 mt-1 uppercase font-semibold">{new Date(order.created_at).toLocaleTimeString()} • {new Date(order.created_at).toLocaleDateString()}</p>
+                          </div>
+                          <div className="flex flex-col items-end gap-1.5">
+                            <span className="font-bold text-slate-800 dark:text-slate-100 text-sm">₹{parseFloat(order.total_amount).toFixed(2)}</span>
+                            <span className={`px-2.5 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wide ${
+                              order.payment_status === 'paid' 
+                                ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400' 
+                                : 'bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400'
+                            }`}>
+                              {order.payment_status === 'paid' ? 'Paid via UPI' : 'COD: Pending'}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Items summary */}
+                        <div className="text-[11px] text-slate-600 dark:text-slate-450 space-y-1">
+                          <p className="font-bold text-slate-500 uppercase text-[9px] tracking-wider">Ordered Juices</p>
+                          {order.order_items?.map((item) => (
+                            <div key={item.id} className="flex justify-between">
+                              <span>• {item.products?.name || 'Fresh Juice'} <span className="font-bold text-slate-700 dark:text-slate-350">x {item.quantity}</span></span>
+                              <span>₹{(parseFloat(item.price_at_order) * item.quantity).toFixed(2)}</span>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Estimated Arrival Banner */}
+                        {showETA && (
+                          <div className="bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200/20 p-3 rounded-xl flex items-center gap-2.5 text-xs text-blue-700 dark:text-blue-400">
+                            <Clock className="w-4 h-4 shrink-0 animate-spin-slow text-primary" />
+                            <div>
+                              <p className="font-semibold">Estimated Arrival: 30 minutes</p>
+                              {order.order_status !== 'pending' && (
+                                <p className="text-[10px] text-slate-550 dark:text-slate-400 mt-0.5">Your fresh order has been approved & is actively processing.</p>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* 6-Stage Timeline */}
+                        <div className="pt-2 pb-2">
+                          <p className="font-bold text-slate-500 uppercase text-[9px] tracking-wider mb-3">Delivery Progress</p>
+                          <div className="space-y-3 pl-1.5">
+                            {steps.map((step, idx) => {
+                              const isCompleted = idx < currentStep;
+                              const isActive = idx === currentStep;
+                              const isRejected = order.order_status === 'rejected';
+
+                              return (
+                                <div key={step.key} className="flex gap-3 text-xs relative">
+                                  {/* Connector Line */}
+                                  {idx < steps.length - 1 && (
+                                    <div className={`w-0.5 absolute left-[7px] top-[18px] bottom-[-16px] -z-10 ${
+                                      idx < currentStep ? 'bg-primary' : 'bg-slate-200 dark:bg-slate-800'
+                                    }`} />
+                                  )}
+
+                                  {/* Step Circle */}
+                                  <div className={`w-4.5 h-4.5 rounded-full flex items-center justify-center border-2 shrink-0 z-10 transition-colors ${
+                                    isRejected && idx > 0
+                                      ? 'border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950 text-slate-350'
+                                      : isCompleted
+                                      ? 'border-primary bg-primary text-white'
+                                      : isActive
+                                      ? 'border-primary bg-white dark:bg-slate-900 text-primary animate-pulse'
+                                      : 'border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950 text-slate-300'
+                                  }`}>
+                                    {isCompleted ? (
+                                      <Check className="w-2.5 h-2.5 stroke-[3]" />
+                                    ) : (
+                                      <div className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-primary' : 'bg-transparent'}`} />
+                                    )}
+                                  </div>
+
+                                  {/* Step details */}
+                                  <div className="space-y-0.5">
+                                    <p className={`font-semibold ${
+                                      isRejected && idx > 0
+                                        ? 'text-slate-400 line-through'
+                                        : isActive
+                                        ? 'text-primary font-bold'
+                                        : isCompleted
+                                        ? 'text-slate-800 dark:text-slate-200'
+                                        : 'text-slate-400 dark:text-slate-550'
+                                    }`}>
+                                      {step.label} {isRejected && idx === 1 && <span className="text-rose-500 font-bold font-sans">(REJECTED)</span>}
+                                    </p>
+                                    <p className="text-[10px] text-slate-400 dark:text-slate-500">{step.desc}</p>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* OTP Verification Alert (Mock SMS receiver) */}
+                        {order.order_status === 'otp_pending' && order.otp_code && (
+                          <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-250/25 p-4 rounded-xl flex flex-col gap-2.5 text-xs">
+                            <div className="flex items-center gap-2 font-bold text-amber-800 dark:text-amber-300">
+                              <Lock className="w-4 h-4 shrink-0 text-amber-500" />
+                              <span>Verify Delivery via OTP</span>
+                            </div>
+                            <p className="text-slate-650 dark:text-slate-400 leading-relaxed text-[11px]">
+                              Provide the 4-digit code below to the delivery partner to verify checkout & close transaction.
+                            </p>
+                            <div className="flex items-center gap-2 bg-white dark:bg-slate-900 border border-amber-200/40 p-2.5 rounded-lg w-fit">
+                              <span className="text-[9px] font-bold text-slate-450 uppercase tracking-wider">SMS Simulator OTP:</span>
+                              <span className="font-mono text-sm font-extrabold text-amber-600 dark:text-amber-400 tracking-widest">{order.otp_code}</span>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* WhatsApp support confirmation */}
+                        <a
+                          href={getWhatsAppShareLink(order)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="w-full bg-green-55 hover:bg-green-100 text-green-700 dark:text-green-400 dark:bg-green-950/20 py-2.5 rounded-xl text-center text-[10px] font-bold flex items-center justify-center gap-1.5 border border-green-200/20 transition-colors"
+                        >
+                          <Share2 className="w-3.5 h-3.5" /> WhatsApp Confirmation
+                        </a>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
