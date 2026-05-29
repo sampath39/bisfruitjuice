@@ -141,11 +141,13 @@ export const AuthProvider = ({ children }) => {
       }
 
       // Real Supabase Sign Up
+      const siteUrl = import.meta.env.VITE_SITE_URL || window.location.origin;
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
-          data: { full_name: fullName, phone, role }
+          data: { full_name: fullName, phone, role },
+          emailRedirectTo: `${siteUrl}/orders`
         }
       });
 
