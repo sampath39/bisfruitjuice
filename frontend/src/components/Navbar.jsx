@@ -57,7 +57,7 @@ export default function Navbar() {
   const navLinks = [
     { name: 'Home', path: '/' },
     { name: 'Menu', path: '/products' },
-    { name: 'My Orders', path: '/orders' }
+    { name: 'My Orders', path: '/my-orders' }
   ];
 
   return (
@@ -147,7 +147,7 @@ export default function Navbar() {
                 </div>
                 
                 <Link
-                  to="/orders"
+                  to="/my-orders"
                   onClick={() => setUserDropdownOpen(false)}
                   className="flex items-center gap-2 px-4 py-2 text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
                 >

@@ -11,6 +11,7 @@ import CartDrawer from './components/CartDrawer.jsx';
 import Home from './pages/Home.jsx';
 import Products from './pages/Products.jsx';
 import Orders from './pages/Orders.jsx';
+import MyOrders from './pages/MyOrders.jsx';
 import AdminDashboard from './pages/AdminDashboard.jsx';
 
 export default function App() {
@@ -32,6 +33,7 @@ export default function App() {
                   <Route path="/" element={<Home />} />
                   <Route path="/products" element={<Products />} />
                   <Route path="/orders" element={<Orders />} />
+                  <Route path="/my-orders" element={<MyOrders />} />
                   <Route path="/admin" element={<AdminDashboard />} />
                 </Routes>
               </main>
