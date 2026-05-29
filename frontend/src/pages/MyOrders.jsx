@@ -15,7 +15,8 @@ import {
   Lock,
   Check,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  XCircle
 } from 'lucide-react';
 
 export default function MyOrders() {
@@ -371,18 +372,32 @@ export default function MyOrders() {
             return (
               <div 
                 key={order.id} 
-                className="glass-card border border-slate-100 dark:border-slate-850 p-6 rounded-3xl shadow-sm text-left hover:shadow-md transition-shadow flex flex-col gap-6"
+                className={`glass-card p-6 rounded-3xl shadow-sm text-left hover:shadow-md transition-shadow flex flex-col gap-6 border ${
+                  order.order_status === 'rejected'
+                    ? 'border-rose-300/60 dark:border-rose-800/50 bg-rose-50/30 dark:bg-rose-950/10'
+                    : 'border-slate-100 dark:border-slate-850'
+                }`}
               >
                 {/* Main Order Card Header */}
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-100 dark:border-slate-850 pb-4">
+                <div className={`flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-4 border-b ${
+                  order.order_status === 'rejected'
+                    ? 'border-rose-200 dark:border-rose-900/40'
+                    : 'border-slate-100 dark:border-slate-850'
+                }`}>
                   <div className="space-y-0.5">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-mono text-base font-extrabold text-slate-850 dark:text-slate-100 tracking-wider">
                         Order {order.order_code || `BFJ-2026-${order.id.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().substring(0, 4)}`}
                       </span>
-                      <span className="inline-flex items-center gap-1 text-[9px] font-bold text-primary bg-green-50 dark:bg-green-950/40 px-2 py-0.5 rounded-full uppercase tracking-wider">
-                        <span className="w-1 h-1 bg-primary rounded-full animate-ping" /> Realtime
-                      </span>
+                      {order.order_status === 'rejected' ? (
+                        <span className="inline-flex items-center gap-1 text-[9px] font-bold text-rose-600 bg-rose-50 dark:bg-rose-950/40 px-2 py-0.5 rounded-full uppercase tracking-wider border border-rose-200/30">
+                          <XCircle className="w-2.5 h-2.5" /> Rejected Order
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-[9px] font-bold text-primary bg-green-50 dark:bg-green-950/40 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                          <span className="w-1 h-1 bg-primary rounded-full animate-ping" /> Realtime
+                        </span>
+                      )}
                     </div>
                     <p className="text-[10px] text-slate-450 uppercase font-semibold">
                       Placed on {new Date(order.created_at).toLocaleString('en-IN', { timeStyle: 'short', dateStyle: 'medium' })}
@@ -456,8 +471,16 @@ export default function MyOrders() {
                           </div>
 
                           <div className="space-y-0.5">
-                            <p className={`font-bold leading-none ${isActive ? 'text-primary' : 'text-slate-700 dark:text-slate-350'}`}>
-                              {step.label}
+                            <p className={`font-bold leading-none ${
+                              isRejected && idx > 0
+                                ? 'text-slate-400 line-through'
+                                : isActive
+                                ? 'text-primary'
+                                : isCompleted
+                                ? 'text-slate-800 dark:text-slate-200'
+                                : 'text-slate-400 dark:text-slate-550'
+                            }`}>
+                              {step.label}{isRejected && idx === 1 && <span className="ml-1 text-rose-600 font-bold not-italic no-underline">(REJECTED)</span>}
                             </p>
                             <p className="text-[10px] text-slate-450">{step.desc}</p>
                           </div>
@@ -466,6 +489,36 @@ export default function MyOrders() {
                     })}
                   </div>
                 </div>
+
+                {/* Rejected Order Alert Banner */}
+                {order.order_status === 'rejected' && (
+                  <div className="bg-rose-50 dark:bg-rose-950/20 border border-rose-300/40 p-5 rounded-2xl flex flex-col gap-3 animate-fadeIn">
+                    <div className="flex items-center gap-2.5">
+                      <span className="p-2 bg-rose-100 dark:bg-rose-950/60 text-rose-600 rounded-xl shrink-0">
+                        <XCircle className="w-6 h-6" />
+                      </span>
+                      <div>
+                        <h4 className="font-bold text-rose-700 dark:text-rose-400 text-sm">Order Rejected!</h4>
+                        <p className="text-[10px] text-rose-600 dark:text-rose-500 font-semibold uppercase tracking-wider">This order was not accepted by the shop</p>
+                      </div>
+                    </div>
+                    <p className="text-xs text-rose-700 dark:text-rose-350 leading-relaxed">
+                      Unfortunately, Imran at Bismilla Fruit Juice was unable to confirm or fulfill this order at this time.
+                      If you paid online via Razorpay or UPI, your full amount will be <strong>refunded within 2–3 business days</strong> to your original payment source.
+                    </p>
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                      You can place a new order from our fresh menu, or reach us on WhatsApp for support.
+                    </p>
+                    <a
+                      href={`https://wa.me/917989646180?text=Hello%20Imran!%20My%20Order%20${order.order_code || order.id.substring(0, 8)}%20was%20rejected.%20Please%20help!`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="self-start bg-rose-600 hover:bg-rose-700 text-white font-bold text-[10px] px-4 py-2 rounded-xl transition-colors shadow-sm flex items-center gap-1.5"
+                    >
+                      <XCircle className="w-3 h-3" /> Contact Support on WhatsApp
+                    </a>
+                  </div>
+                )}
 
                 {/* OTP Verification details box */}
                 {order.order_status === 'otp_pending' && order.otp_code && (

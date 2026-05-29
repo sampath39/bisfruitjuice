@@ -1,0 +1,49 @@
+{
+  "2cd3326b-cce6-4f4d-811d-f75146de7444": {
+    "otp_code": null,
+    "otp_verified": false,
+    "accepted_at": "2026-05-29T08:13:10.910Z",
+    "delivered_at": null
+  },
+  "1da63ac7-9427-4f58-b9b4-6d91a0387eed": {
+    "otp_code": null,
+    "otp_verified": false,
+    "accepted_at": "2026-05-29T08:22:21.814Z",
+    "delivered_at": null,
+    "metadata_status": "preparing"
+  },
+  "4cf00544-ef3f-4338-9a91-a2aff333fd6d": {
+    "otp_code": null,
+    "otp_verified": false,
+    "accepted_at": "2026-05-29T09:02:49.698Z",
+    "delivered_at": null,
+    "metadata_status": "preparing"
+  },
+  "d3130dab-4594-4474-af28-51aa9f28ebf5": {
+    "otp_code": "2228",
+    "otp_verified": true,
+    "accepted_at": "2026-05-29T09:07:03.158Z",
+    "delivered_at": "2026-05-29T09:07:04.110Z",
+    "metadata_status": "delivered"
+  },
+  "1f7a6f6c-5d59-48e9-89a9-b47e3334f295": {
+    "otp_code": "2442",
+    "otp_verified": true,
+    "accepted_at": "2026-05-29T09:18:46.060Z",
+    "delivered_at": "2026-05-29T09:18:46.968Z",
+    "metadata_status": "delivered"
+  },
+  "05d2bb04-acfa-48d5-859b-b421c883a0c1": {
+    "otp_code": "9119",
+    "otp_verified": true,
+    "accepted_at": "2026-05-29T09:52:32.324Z",
+    "delivered_at": "2026-05-29T09:52:33.333Z",
+    "metadata_status": "delivered",
+    "clerk_user_id": null,
+    "delivery_eta": "30 minutes",
+    "payment_status": "PAYMENT COMPLETED",
+    "payment_time": "2026-05-29T09:52:33.333Z",
+    "razorpay_transaction_id": "txn_cod_1780048353333",
+    "payment_method": "COD"
+  }
+}

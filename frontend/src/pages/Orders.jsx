@@ -11,6 +11,7 @@ import {
   CreditCard, 
   Clock, 
   CheckCircle2, 
+  XCircle,
   AlertTriangle,
   ArrowRight,
   User,
@@ -896,14 +897,29 @@ export default function Orders() {
       {confirmedOrder ? (
         <div className="max-w-2xl mx-auto w-full glass-card p-8 sm:p-10 rounded-3xl text-center border border-slate-100 dark:border-slate-850 shadow-xl space-y-6">
           <div className="flex justify-center">
-            <span className="p-4 bg-emerald-100 dark:bg-emerald-950/60 text-primary rounded-full shadow-md animate-bounce-slow">
-              <CheckCircle2 className="w-12 h-12" />
-            </span>
+            {confirmedOrder.order_status === 'rejected' ? (
+              <span className="p-4 bg-rose-150 text-rose-600 rounded-full shadow-md animate-pulse">
+                <XCircle className="w-12 h-12" />
+              </span>
+            ) : (
+              <span className="p-4 bg-emerald-100 dark:bg-emerald-950/60 text-primary rounded-full shadow-md animate-bounce-slow">
+                <CheckCircle2 className="w-12 h-12" />
+              </span>
+            )}
           </div>
 
           <div className="space-y-2">
-            <h2 className="text-2xl sm:text-3xl font-display font-bold text-slate-900 dark:text-white">Order Confirmed!</h2>
-            <p className="text-xs text-slate-500">Your order has been received and is being prepared with 100% pure fruits.</p>
+            {confirmedOrder.order_status === 'rejected' ? (
+              <>
+                <h2 className="text-2xl sm:text-3xl font-display font-bold text-rose-600 dark:text-rose-400">Order Rejected!</h2>
+                <p className="text-xs text-rose-500 font-medium">Unfortunately, this order has been rejected by the shop.</p>
+              </>
+            ) : (
+              <>
+                <h2 className="text-2xl sm:text-3xl font-display font-bold text-slate-900 dark:text-white">Order Confirmed!</h2>
+                <p className="text-xs text-slate-500">Your order has been received and is being prepared with 100% pure fruits.</p>
+              </>
+            )}
           </div>
 
           {/* Receipt Info card */}
@@ -990,6 +1006,22 @@ export default function Orders() {
                   <span className="text-[10px] font-semibold text-slate-400">Use the OTP input box below to verify code & complete delivery!</span>
                 )}
               </div>
+            </div>
+          )}
+
+          {confirmedOrder.order_status === 'rejected' && (
+            <div className="bg-rose-500/5 dark:bg-rose-950/10 border border-rose-500/25 p-5 rounded-2xl text-left space-y-2.5 animate-fadeIn">
+              <div className="flex items-center gap-2 font-bold text-rose-800 dark:text-rose-400">
+                <XCircle className="w-5 h-5 text-rose-500" />
+                <span className="text-sm">This Order Has Been Rejected</span>
+              </div>
+              <p className="text-rose-700 dark:text-rose-350 leading-relaxed text-xs">
+                Unfortunately, Imran at Bismilla Fruit Juice Shop was unable to confirm or fulfill your order at this time. 
+                If you made a payment online via Razorpay or UPI, your amount will be **refunded fully to your original payment source within 2-3 business days**.
+              </p>
+              <p className="text-[10px] text-slate-550 dark:text-slate-450">
+                Please feel free to go back to the menu and choose another juice, or query our support team on WhatsApp.
+              </p>
             </div>
           )}
 
@@ -1457,12 +1489,27 @@ export default function Orders() {
                     return (
                       <div 
                         key={order.id} 
-                        className="border border-slate-100 dark:border-slate-800 p-5 rounded-2xl bg-slate-55 dark:bg-slate-950/20 space-y-4 shadow-sm"
+                        className={`border p-5 rounded-2xl space-y-4 shadow-sm ${
+                          order.order_status === 'rejected'
+                            ? 'border-rose-300/60 dark:border-rose-800/50 bg-rose-50/20 dark:bg-rose-950/10'
+                            : 'border-slate-100 dark:border-slate-800 bg-slate-55 dark:bg-slate-950/20'
+                        }`}
                       >
                         {/* Order Header */}
-                        <div className="flex justify-between items-start text-xs border-b border-slate-100 dark:border-slate-850 pb-3">
+                        <div className={`flex justify-between items-start text-xs pb-3 border-b ${
+                          order.order_status === 'rejected'
+                            ? 'border-rose-200 dark:border-rose-900/40'
+                            : 'border-slate-100 dark:border-slate-850'
+                        }`}>
                           <div>
-                            <p className="font-mono font-bold text-slate-850 dark:text-slate-200 text-sm">#{order.id.substring(0, 8)}</p>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="font-mono font-bold text-slate-850 dark:text-slate-200 text-sm">#{order.id.substring(0, 8)}</p>
+                              {order.order_status === 'rejected' && (
+                                <span className="inline-flex items-center gap-1 text-[9px] font-bold text-rose-600 bg-rose-50 dark:bg-rose-950/40 px-2 py-0.5 rounded-full uppercase border border-rose-200/30">
+                                  <XCircle className="w-2.5 h-2.5" /> Rejected
+                                </span>
+                              )}
+                            </div>
                             <p className="text-[9px] text-slate-450 mt-1 uppercase font-semibold">{new Date(order.created_at).toLocaleTimeString()} • {new Date(order.created_at).toLocaleDateString()}</p>
                           </div>
                           <div className="flex flex-col items-end gap-1.5">
