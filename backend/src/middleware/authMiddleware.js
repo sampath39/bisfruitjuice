@@ -1,7 +1,13 @@
-import { supabase, isMockMode } from '../config/db.js';
+import { createClerkClient } from '@clerk/backend';
+import { isMockMode } from '../config/db.js';
+
+// Initialize the Clerk backend client using the secret key from environment variables
+const clerkClient = createClerkClient({ 
+  secretKey: process.env.CLERK_SECRET_KEY 
+});
 
 /**
- * Middleware to verify Supabase Auth token or mock token and attach user to request
+ * Middleware to verify Clerk Auth token or mock token and attach user to request
  */
 export const requireAuth = async (req, res, next) => {
   try {
@@ -12,7 +18,7 @@ export const requireAuth = async (req, res, next) => {
 
     const token = authHeader.split(' ')[1];
     
-    // Handle Mock Authentication token bypass
+    // Handle Mock Authentication token bypass (used in tests and local development)
     if (isMockMode || token.startsWith('mock_token_jwt_')) {
       const role = token.includes('admin') ? 'admin' : 'customer';
       req.user = {
@@ -25,34 +31,32 @@ export const requireAuth = async (req, res, next) => {
       return next();
     }
 
-    // Real Supabase Auth verification
-    const { data: { user }, error } = await supabase.auth.getUser(token);
-    
-    if (error || !user) {
+    try {
+      // Real Clerk Token verification
+      const verified = await clerkClient.verifyToken(token);
+      
+      // Fetch full user details from Clerk to get email, phone, metadata role, etc.
+      const user = await clerkClient.users.getUser(verified.sub);
+      
+      const email = user.emailAddresses[0]?.emailAddress || '';
+      const phone = user.phoneNumbers[0]?.phoneNumber || '';
+      const fullName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Customer';
+      const role = user.unsafeMetadata?.role || 'customer';
+
+      // Attach user data to the request object
+      req.user = {
+        id: user.id,
+        email,
+        phone,
+        fullName,
+        role
+      };
+
+      next();
+    } catch (verifyError) {
+      console.warn('[Auth Middleware] Clerk verification failed:', verifyError.message);
       return res.status(401).json({ error: 'Invalid or expired authorization token' });
     }
-
-    // Fetch user's profile to get their role
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', user.id)
-      .single();
-
-    if (profileError && profileError.code !== 'PGRST116') {
-      console.error('Error fetching user profile:', profileError);
-    }
-
-    // Attach user and profile data to the request object
-    req.user = {
-      id: user.id,
-      email: user.email,
-      phone: profile?.phone || user.phone,
-      fullName: profile?.full_name || user.user_metadata?.full_name || 'Customer',
-      role: profile?.role || 'customer'
-    };
-
-    next();
   } catch (err) {
     console.error('Auth middleware error:', err);
     res.status(500).json({ error: 'Internal server error in auth verification' });
@@ -99,29 +103,29 @@ export const optionalAuth = async (req, res, next) => {
       return next();
     }
 
-    // Real Supabase Auth verification
-    const { data: { user }, error } = await supabase.auth.getUser(token);
+    try {
+      // Verify token
+      const verified = await clerkClient.verifyToken(token);
+      
+      // Fetch full user details from Clerk
+      const user = await clerkClient.users.getUser(verified.sub);
+      
+      const email = user.emailAddresses[0]?.emailAddress || '';
+      const phone = user.phoneNumbers[0]?.phoneNumber || '';
+      const fullName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Customer';
+      const role = user.unsafeMetadata?.role || 'customer';
 
-    if (error || !user) {
-      // Invalid token — treat as guest (don't 401)
+      req.user = {
+        id: user.id,
+        email,
+        phone,
+        fullName,
+        role
+      };
+    } catch (verifyError) {
+      // Token invalid or expired, treat as guest (don't 401)
       req.user = null;
-      return next();
     }
-
-    // Fetch user profile
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', user.id)
-      .single();
-
-    req.user = {
-      id: user.id,
-      email: user.email,
-      phone: profile?.phone || user.phone,
-      fullName: profile?.full_name || user.user_metadata?.full_name || 'Customer',
-      role: profile?.role || 'customer'
-    };
 
     next();
   } catch (err) {

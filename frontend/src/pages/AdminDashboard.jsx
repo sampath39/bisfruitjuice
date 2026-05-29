@@ -1208,6 +1208,12 @@ export default function AdminDashboard() {
             <div className="space-y-1">
               <h3 className="font-semibold text-lg text-slate-900 dark:text-white">Delivery OTP Verification</h3>
               <p className="text-xs text-slate-500">Enter the 4-digit code provided by customer **{otpModalOrder.customer_name}**</p>
+              {otpModalOrder.payment_method === 'COD' && (
+                <div className="bg-emerald-55/10 dark:bg-emerald-950/20 border border-emerald-500/20 rounded-xl p-2.5 mt-2 animate-fadeIn">
+                  <p className="text-[10px] uppercase font-bold text-slate-400">Amount Received / Collect Cash:</p>
+                  <p className="text-base font-extrabold text-emerald-600 dark:text-emerald-400">₹{parseFloat(otpModalOrder.total_amount).toFixed(2)}</p>
+                </div>
+              )}
             </div>
 
             {/* Developer/Testing Helper note */}

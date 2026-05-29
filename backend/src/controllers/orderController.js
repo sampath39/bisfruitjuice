@@ -2,6 +2,13 @@ import { supabase, isMockMode } from '../config/db.js';
 import dotenv from 'dotenv';
 import axios from 'axios';
 import { broadcast } from '../config/websocket.js';
+import { 
+  getMetadata, 
+  setMetadata, 
+  mergeOrderWithMetadata, 
+  mergeOrdersWithMetadata,
+  mapStatusToDb
+} from '../utils/orderMetadata.js';
 
 dotenv.config();
 
@@ -128,6 +135,13 @@ export const verifyDeliveryDistance = async (req, res) => {
   }
 };
 
+// UUID Validation Helper
+const isValidUUID = (str) => {
+  if (!str) return false;
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(str);
+};
+
 // Create a new order
 export const createOrder = async (req, res) => {
   try {
@@ -187,7 +201,9 @@ export const createOrder = async (req, res) => {
       const mockOrderId = `ord_mock_${Math.random().toString(36).substring(2, 9)}`;
       const mockOrder = {
         id: mockOrderId,
-        user_id: user_id || 'mock_user_id',
+        user_id: null,
+        clerk_user_id: user_id || req.user?.id || 'mock_user_id',
+        delivery_eta: '30 minutes',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         ...orderPayload,
@@ -199,6 +215,9 @@ export const createOrder = async (req, res) => {
         }))
       };
       
+      mockOrder.payment_status = payment_method === 'COD' ? 'NOT PAID' : 'pending';
+      mockOrder.order_status = 'pending'; // rich status "Order Placed" maps to pending
+      
       inMemoryOrders.unshift(mockOrder);
       broadcast({ type: 'NEW_ORDER', order: mockOrder });
       return res.status(201).json({
@@ -207,12 +226,33 @@ export const createOrder = async (req, res) => {
       });
     }
 
-    // DB insert
+    // DB insert: Validate and verify profile user ID reference
+    let finalUserId = user_id || req.user?.id || null;
+    const clerkUserId = finalUserId;
+    if (finalUserId) {
+      if (!isValidUUID(finalUserId)) {
+        console.warn(`[Order Controller] user_id "${finalUserId}" is not a valid UUID. Setting to null.`);
+        finalUserId = null;
+      } else {
+        // Double-check if the profile exists in public.profiles to prevent foreign key errors
+        const { data: profileExists } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('id', finalUserId)
+          .single();
+        
+        if (!profileExists) {
+          console.warn(`[Order Controller] user_id "${finalUserId}" does not exist in profiles table. Setting to null.`);
+          finalUserId = null;
+        }
+      }
+    }
+
     const { data: order, error: orderError } = await supabase
       .from('orders')
       .insert([
         {
-          user_id: user_id || req.user?.id || null,
+          user_id: finalUserId,
           ...orderPayload
         }
       ])
@@ -221,8 +261,42 @@ export const createOrder = async (req, res) => {
 
     if (orderError) throw orderError;
 
+    // Initialize rich metadata details immediately
+    setMetadata(order.id, {
+      clerk_user_id: clerkUserId,
+      delivery_eta: '30 minutes',
+      metadata_status: 'pending', // "Order Placed"
+      payment_status: payment_method === 'COD' ? 'NOT PAID' : 'pending'
+    });
+
+    // Resolve mock product IDs to real Supabase product UUIDs if present
+    const resolvedItems = [];
+    const { data: dbProducts, error: dbProductsError } = await supabase
+      .from('products')
+      .select('id, name');
+    
+    for (const item of items) {
+      let resolvedProductId = item.product_id;
+      if (resolvedProductId && !isValidUUID(resolvedProductId)) {
+        if (!dbProductsError && dbProducts && dbProducts.length > 0) {
+          const fallbackProd = getMockProductInfo(resolvedProductId);
+          if (fallbackProd) {
+            const matchedDbProd = dbProducts.find(p => p.name.toLowerCase() === fallbackProd.name.toLowerCase());
+            if (matchedDbProd) {
+              resolvedProductId = matchedDbProd.id;
+              console.log(`[Order Controller] Resolved mock product ID "${item.product_id}" to DB UUID "${resolvedProductId}" (${fallbackProd.name})`);
+            }
+          }
+        }
+      }
+      resolvedItems.push({
+        ...item,
+        product_id: resolvedProductId
+      });
+    }
+
     // Insert order items
-    const orderItemsToInsert = items.map(item => ({
+    const orderItemsToInsert = resolvedItems.map(item => ({
       order_id: order.id,
       product_id: item.product_id,
       quantity: parseInt(item.quantity),
@@ -258,7 +332,7 @@ export const createOrder = async (req, res) => {
       .eq('id', order.id)
       .single();
 
-    const orderToReturn = fullOrder || order;
+    const orderToReturn = mergeOrderWithMetadata(fullOrder || order);
     broadcast({ type: 'NEW_ORDER', order: orderToReturn });
 
     res.status(201).json({
@@ -273,18 +347,18 @@ export const createOrder = async (req, res) => {
 // Get orders for current user or guest (based on ids query param)
 export const getMyOrders = async (req, res) => {
   try {
+    const guestOrderIds = req.query.ids ? req.query.ids.split(',') : [];
+
     if (isMockMode) {
       if (!req.user) {
-        const guestOrderIds = req.query.ids ? req.query.ids.split(',') : [];
         if (guestOrderIds.length === 0) return res.json([]);
         return res.json(inMemoryOrders.filter(o => guestOrderIds.includes(o.id)));
       }
-      return res.json(inMemoryOrders);
+      return res.json(inMemoryOrders.filter(o => o.clerk_user_id === req.user.id || o.user_id === req.user.id || guestOrderIds.includes(o.id)));
     }
 
     if (!req.user) {
       // Guest mode: fetch orders matching the given IDs
-      const guestOrderIds = req.query.ids ? req.query.ids.split(',') : [];
       if (guestOrderIds.length === 0) {
         return res.json([]);
       }
@@ -309,11 +383,12 @@ export const getMyOrders = async (req, res) => {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      return res.json(orders);
+      return res.json(mergeOrdersWithMetadata(orders));
     }
 
+    // Authenticated customer mode: fetch orders and filter safely using Clerk ID / metadata
     const userId = req.user.id;
-    const { data: orders, error } = await supabase
+    const { data: allOrders, error } = await supabase
       .from('orders')
       .select(`
         *,
@@ -329,11 +404,13 @@ export const getMyOrders = async (req, res) => {
           )
         )
       `)
-      .eq('user_id', userId)
       .order('created_at', { ascending: false });
 
     if (error) throw error;
-    res.json(orders);
+
+    const merged = mergeOrdersWithMetadata(allOrders);
+    const userOrders = merged.filter(o => o.clerk_user_id === userId || o.user_id === userId || guestOrderIds.includes(o.id));
+    res.json(userOrders);
   } catch (err) {
     console.error('Error fetching user orders:', err);
     res.status(500).json({ error: 'Failed to fetch your orders' });
@@ -367,7 +444,7 @@ export const getAllOrders = async (req, res) => {
       .order('created_at', { ascending: false });
 
     if (error) throw error;
-    res.json(orders);
+    res.json(mergeOrdersWithMetadata(orders));
   } catch (err) {
     console.error('Error fetching all orders:', err);
     res.status(500).json({ error: 'Failed to fetch orders' });
@@ -386,7 +463,10 @@ export const updateOrderStatus = async (req, res) => {
       
       if (order_status) {
         inMemoryOrders[idx].order_status = order_status;
-        if (order_status === 'accepted') inMemoryOrders[idx].accepted_at = new Date().toISOString();
+        if (order_status === 'accepted') {
+          inMemoryOrders[idx].accepted_at = new Date().toISOString();
+          inMemoryOrders[idx].delivery_eta = '30 minutes';
+        }
         if (order_status === 'delivered') inMemoryOrders[idx].delivered_at = new Date().toISOString();
       }
       if (payment_status) inMemoryOrders[idx].payment_status = payment_status;
@@ -404,12 +484,23 @@ export const updateOrderStatus = async (req, res) => {
     }
 
     const updateData = { updated_at: new Date().toISOString() };
+    const metaUpdates = {};
     if (order_status) {
-      updateData.order_status = order_status;
-      if (order_status === 'accepted') updateData.accepted_at = new Date().toISOString();
-      if (order_status === 'delivered') updateData.delivered_at = new Date().toISOString();
+      metaUpdates.metadata_status = order_status;
+      updateData.order_status = mapStatusToDb(order_status);
+      if (order_status === 'accepted') {
+        metaUpdates.accepted_at = new Date().toISOString();
+        metaUpdates.delivery_eta = '30 minutes'; // Customer receives delivery arriving within 30 minutes
+      }
+      if (order_status === 'delivered') {
+        metaUpdates.delivered_at = new Date().toISOString();
+      }
     }
     if (payment_status) updateData.payment_status = payment_status;
+
+    if (order_status || Object.keys(metaUpdates).length > 0) {
+      setMetadata(id, metaUpdates);
+    }
 
     if (order_status === 'delivered') {
       const { data: currentOrder } = await supabase
@@ -445,8 +536,9 @@ export const updateOrderStatus = async (req, res) => {
 
     if (error) throw error;
     
-    broadcast({ type: 'ORDER_UPDATED', order: updatedOrder });
-    res.json({ message: 'Order updated successfully', order: updatedOrder });
+    const mergedOrder = mergeOrderWithMetadata(updatedOrder);
+    broadcast({ type: 'ORDER_UPDATED', order: mergedOrder });
+    res.json({ message: 'Order updated successfully', order: mergedOrder });
   } catch (err) {
     console.error('Error updating order status:', err);
     res.status(500).json({ error: 'Failed to update order status' });
@@ -489,11 +581,15 @@ export const sendDeliveryOTP = async (req, res) => {
 
     if (findError || !order) return res.status(404).json({ error: 'Order not found' });
 
+    setMetadata(id, {
+      otp_code: otp,
+      metadata_status: 'otp_pending'
+    });
+
     const { data: updatedOrder, error } = await supabase
       .from('orders')
       .update({
-        order_status: 'otp_pending',
-        otp_code: otp,
+        order_status: mapStatusToDb('otp_pending'),
         updated_at: new Date().toISOString()
       })
       .eq('id', id)
@@ -521,11 +617,12 @@ export const sendDeliveryOTP = async (req, res) => {
     console.log(`🔑 OTP Code: ${otp}`);
     console.log(`======================================================\n`);
 
-    broadcast({ type: 'ORDER_UPDATED', order: updatedOrder });
+    const mergedOrder = mergeOrderWithMetadata(updatedOrder);
+    broadcast({ type: 'ORDER_UPDATED', order: mergedOrder });
     
     res.json({ 
       message: 'OTP sent successfully', 
-      order: updatedOrder,
+      order: mergedOrder,
       otp_code: otp 
     });
   } catch (err) {
@@ -558,7 +655,9 @@ export const verifyDeliveryOTP = async (req, res) => {
       inMemoryOrders[idx].updated_at = new Date().toISOString();
       
       if (inMemoryOrders[idx].payment_method === 'COD') {
-        inMemoryOrders[idx].payment_status = 'paid';
+        inMemoryOrders[idx].payment_status = 'PAYMENT COMPLETED';
+        inMemoryOrders[idx].payment_time = new Date().toISOString();
+        inMemoryOrders[idx].razorpay_transaction_id = 'txn_cod_' + Date.now();
       }
 
       broadcast({ type: 'ORDER_UPDATED', order: inMemoryOrders[idx] });
@@ -576,19 +675,52 @@ export const verifyDeliveryOTP = async (req, res) => {
 
     if (findError || !order) return res.status(404).json({ error: 'Order not found' });
 
-    if (order.otp_code !== otp) {
+    const meta = getMetadata(id);
+    if (meta.otp_code !== otp) {
       return res.status(400).json({ error: 'Invalid OTP code. Please check and try again.' });
     }
 
-    const updatePayload = {
-      order_status: 'delivered',
+    // Set rich metadata updates
+    const nowStr = new Date().toISOString();
+    const mockTxnId = 'txn_cod_' + Date.now();
+    
+    setMetadata(id, {
       otp_verified: true,
-      delivered_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
+      delivered_at: nowStr,
+      metadata_status: 'delivered',
+      payment_status: 'PAYMENT COMPLETED',
+      payment_time: nowStr,
+      razorpay_transaction_id: mockTxnId,
+      payment_method: 'COD'
+    });
+
+    const updatePayload = {
+      order_status: mapStatusToDb('delivered'),
+      updated_at: nowStr
     };
 
     if (order.payment_method === 'COD') {
       updatePayload.payment_status = 'paid';
+    }
+
+    // Log the cash payment in public.payments table
+    try {
+      const amount = order.total_amount || 0;
+      await supabase
+        .from('payments')
+        .insert([
+          {
+            order_id: id,
+            razorpay_payment_id: mockTxnId,
+            razorpay_order_id: 'cod_order',
+            razorpay_signature: 'COD', // signifies payment method
+            amount,
+            status: 'paid' // SUCCESS / PAYMENT COMPLETED
+          }
+        ]);
+      console.log(`[Order Controller] Logged successful COD cash receipt in payments table for order ${id}.`);
+    } catch (payErr) {
+      console.error('[Order Controller] Failsafe: could not write payment row:', payErr.message);
     }
 
     const { data: updatedOrder, error } = await supabase
@@ -613,11 +745,12 @@ export const verifyDeliveryOTP = async (req, res) => {
 
     if (error) throw error;
 
-    broadcast({ type: 'ORDER_UPDATED', order: updatedOrder });
+    const mergedOrder = mergeOrderWithMetadata(updatedOrder);
+    broadcast({ type: 'ORDER_UPDATED', order: mergedOrder });
     
     res.json({ 
       message: 'OTP verified and order delivered successfully', 
-      order: updatedOrder 
+      order: mergedOrder 
     });
   } catch (err) {
     console.error('Error verifying delivery OTP:', err);

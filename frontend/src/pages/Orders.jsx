@@ -523,18 +523,161 @@ export default function Orders() {
             color: '#22c55e'
           },
           modal: {
-            ondismiss: () => {
-              showToast('Payment modal closed. Complete payment or choose COD.', 'warning');
+            ondismiss: async () => {
+              showToast('Payment cancelled by customer.', 'warning');
+              try {
+                await api.post('/payments/cancelled', { orderId: createdOrder.id });
+              } catch (err) {
+                console.error('Error recording cancellation:', err);
+              }
+              setConfirmedOrder({
+                ...createdOrder,
+                payment_status: 'CANCELLED'
+              });
+              clearCart();
+              fetchMyOrders();
             }
           }
         };
 
         const razorpayInstance = new window.Razorpay(options);
+        
+        razorpayInstance.on('payment.failed', async (response) => {
+          showToast('Payment failed. Try another card or UPI app.', 'error');
+          try {
+            await api.post('/payments/failed', {
+              orderId: createdOrder.id,
+              failureReason: response.error?.description || 'Transaction failed',
+              razorpay_payment_id: response.error?.metadata?.payment_id,
+              razorpay_order_id: response.error?.metadata?.order_id
+            });
+          } catch (err) {
+            console.error('Error recording failure:', err);
+          }
+          setConfirmedOrder({
+            ...createdOrder,
+            payment_status: 'FAILED'
+          });
+          clearCart();
+          fetchMyOrders();
+        });
+
         razorpayInstance.open();
       }
     } catch (err) {
       console.error('Error placing order:', err);
       showToast(err.response?.data?.error || 'Failed to place order. Please try again.', 'error');
+    } finally {
+      setPlacingOrder(false);
+    }
+  };
+
+  const handleRetryPayment = async (order) => {
+    setPlacingOrder(true);
+    try {
+      const scriptLoaded = await loadRazorpayScript();
+      if (!scriptLoaded) {
+        showToast('Failed to load Razorpay Payment Gateway. Check internet connection.', 'error');
+        setPlacingOrder(false);
+        return;
+      }
+
+      // 1. Get Razorpay Order ID from backend
+      const rzpRes = await api.post('/payments/order', { orderId: order.id });
+      const rzpData = rzpRes.data;
+
+      const options = {
+        key: rzpData.key,
+        amount: rzpData.amount,
+        currency: rzpData.currency,
+        name: 'Bismilla Fruit Juice',
+        description: `Retry Payment for Order #${order.id.substring(0, 8)}`,
+        order_id: rzpData.id,
+        handler: async (response) => {
+          try {
+            // Verify payment signature
+            const verifyRes = await api.post('/payments/verify', {
+              orderId: order.id,
+              razorpay_order_id: response.razorpay_order_id || rzpData.id,
+              razorpay_payment_id: response.razorpay_payment_id || `pay_mock_${Math.random().toString(36).substring(2, 11)}`,
+              razorpay_signature: response.razorpay_signature || 'mock_sig',
+              isMock: rzpData.isMock
+            });
+
+            if (verifyRes.data.status === 'success') {
+              showToast('Payment verified successfully!', 'success');
+              
+              // Get the updated order data
+              const updatedOrder = { 
+                ...order, 
+                payment_status: 'paid', 
+                payment_id: response.razorpay_payment_id 
+              };
+              
+              setConfirmedOrder(updatedOrder);
+
+              // Instant local state sync
+              setMyOrders((prev) => prev.map(o => o.id === order.id ? updatedOrder : o));
+
+              fetchMyOrders();
+            } else {
+              showToast('Payment verification failed.', 'error');
+            }
+          } catch (err) {
+            console.error('Error verifying payment:', err);
+            showToast('Payment verification failed.', 'error');
+          }
+        },
+        prefill: {
+          name: order.customer_name || 'Customer',
+          email: user?.email || 'guest@example.com',
+          contact: order.customer_mobile
+        },
+        theme: {
+          color: '#22c55e'
+        },
+        modal: {
+          ondismiss: async () => {
+            showToast('Payment retry cancelled by user.', 'warning');
+            try {
+              await api.post('/payments/cancelled', { orderId: order.id });
+            } catch (err) {
+              console.error('Error recording cancellation:', err);
+            }
+            setConfirmedOrder({
+              ...order,
+              payment_status: 'CANCELLED'
+            });
+            fetchMyOrders();
+          }
+        }
+      };
+
+      const razorpayInstance = new window.Razorpay(options);
+      
+      razorpayInstance.on('payment.failed', async (response) => {
+        showToast('Payment failed. Try another card or UPI app.', 'error');
+        try {
+          await api.post('/payments/failed', {
+            orderId: order.id,
+            failureReason: response.error?.description || 'Transaction failed',
+            razorpay_payment_id: response.error?.metadata?.payment_id,
+            razorpay_order_id: response.error?.metadata?.order_id
+          });
+        } catch (err) {
+          console.error('Error recording failure:', err);
+        }
+        setConfirmedOrder({
+          ...order,
+          payment_status: 'FAILED'
+        });
+        fetchMyOrders();
+      });
+
+      razorpayInstance.open();
+    } catch (err) {
+      console.error('Error retrying payment:', err);
+      showToast('Failed to initiate payment retry.', 'error');
     } finally {
       setPlacingOrder(false);
     }
@@ -549,6 +692,46 @@ export default function Orders() {
   const getOrderStatusStep = (status) => {
     const steps = ['pending', 'accepted', 'preparing', 'out_for_delivery', 'otp_pending', 'delivered'];
     return steps.indexOf(status);
+  };
+
+  const getPaymentStatusBadge = (order) => {
+    const isCOD = order.payment_method === 'COD';
+    const isPaid = order.payment_status === 'paid' || order.payment_status === 'PAYMENT COMPLETED';
+    const isFailed = order.payment_status === 'failed' || order.payment_status === 'FAILED';
+    const isCancelled = order.payment_status === 'CANCELLED';
+
+    let text = order.payment_status;
+    let className = 'bg-amber-50 text-amber-705 border border-amber-200/20 dark:bg-amber-950/20 dark:text-amber-450';
+
+    if (isCOD) {
+      if (isPaid) {
+        text = 'Payment Completed';
+        className = 'bg-gradient-to-r from-emerald-500/10 to-teal-500/10 text-emerald-600 border border-emerald-500/20 dark:from-emerald-950/20 dark:to-teal-950/20 dark:text-emerald-400';
+      } else {
+        text = 'Payment Pending';
+        className = 'bg-amber-50 text-amber-705 border border-amber-200/20 dark:bg-amber-950/20 dark:text-amber-450';
+      }
+    } else { // UPI / Razorpay
+      if (isPaid) {
+        text = 'Paid Successfully';
+        className = 'bg-gradient-to-r from-emerald-500/10 to-teal-500/10 text-emerald-600 border border-emerald-500/20 dark:from-emerald-950/20 dark:to-teal-950/20 dark:text-emerald-400';
+      } else if (isFailed) {
+        text = 'Payment Failed';
+        className = 'bg-gradient-to-r from-rose-500/10 to-pink-500/10 text-rose-600 border border-rose-500/25 dark:from-rose-950/20 dark:to-pink-950/20 dark:text-rose-400';
+      } else if (isCancelled) {
+        text = 'Payment Cancelled';
+        className = 'bg-slate-100 text-slate-600 border border-slate-200/25 dark:bg-slate-900 dark:text-slate-400';
+      } else {
+        text = 'Payment Pending';
+        className = 'bg-amber-50 text-amber-705 border border-amber-200/20 dark:bg-amber-950/20 dark:text-amber-450';
+      }
+    }
+
+    return (
+      <span className={`inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide shrink-0 ${className}`}>
+        {text}
+      </span>
+    );
   };
 
   return (
@@ -629,13 +812,19 @@ export default function Orders() {
               </div>
               <div className="space-y-1">
                 <span className="text-[10px] text-slate-400 font-semibold block uppercase">Payment Status</span>
-                <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                  confirmedOrder.payment_status === 'paid' 
-                    ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700' 
-                    : 'bg-amber-100 dark:bg-amber-950 text-amber-700'
-                }`}>
-                  {confirmedOrder.payment_status}
-                </span>
+                <div className="flex items-center gap-2 mt-0.5">
+                  {getPaymentStatusBadge(confirmedOrder)}
+                  {(confirmedOrder.payment_method === 'Razorpay' && 
+                    ['FAILED', 'CANCELLED', 'failed'].includes(confirmedOrder.payment_status)) && (
+                    <button
+                      type="button"
+                      onClick={() => handleRetryPayment(confirmedOrder)}
+                      className="bg-primary hover:bg-green-600 text-white text-[9px] font-extrabold px-2.5 py-0.5 rounded-full transition-all shadow-sm flex items-center gap-1 animate-pulse"
+                    >
+                      <CreditCard className="w-2.5 h-2.5" /> Retry Pay
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -1096,13 +1285,17 @@ export default function Orders() {
                           </div>
                           <div className="flex flex-col items-end gap-1.5">
                             <span className="font-bold text-slate-800 dark:text-slate-100 text-sm">₹{parseFloat(order.total_amount).toFixed(2)}</span>
-                            <span className={`px-2.5 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wide ${
-                              order.payment_status === 'paid' 
-                                ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400' 
-                                : 'bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400'
-                            }`}>
-                              {order.payment_status === 'paid' ? 'Paid via UPI' : 'COD: Pending'}
-                            </span>
+                            {getPaymentStatusBadge(order)}
+                            {(order.payment_method === 'Razorpay' && 
+                              ['FAILED', 'CANCELLED', 'failed'].includes(order.payment_status)) && (
+                              <button
+                                type="button"
+                                onClick={() => handleRetryPayment(order)}
+                                className="bg-primary hover:bg-green-600 text-white text-[9px] font-extrabold px-2.5 py-0.5 rounded-full transition-all shadow-sm flex items-center gap-1 mt-1 animate-pulse"
+                              >
+                                <CreditCard className="w-2.5 h-2.5" /> Retry Pay
+                              </button>
+                            )}
                           </div>
                         </div>
 

@@ -2,6 +2,8 @@ import Razorpay from 'razorpay';
 import crypto from 'crypto';
 import { supabase } from '../config/db.js';
 import dotenv from 'dotenv';
+import { setMetadata, mergeOrderWithMetadata } from '../utils/orderMetadata.js';
+import { broadcast } from '../config/websocket.js';
 
 dotenv.config();
 
@@ -100,6 +102,37 @@ export const createRazorpayOrder = async (req, res) => {
   }
 };
 
+// Helper function to broadcast live order updates
+const broadcastOrderUpdate = async (orderId) => {
+  try {
+    const { data: fullOrder } = await supabase
+      .from('orders')
+      .select(`
+        *,
+        order_items (
+          id,
+          quantity,
+          price_at_order,
+          products (
+            id,
+            name,
+            image_url,
+            category
+          )
+        )
+      `)
+      .eq('id', orderId)
+      .single();
+
+    if (fullOrder) {
+      const mergedOrder = mergeOrderWithMetadata(fullOrder);
+      broadcast({ type: 'ORDER_UPDATED', order: mergedOrder });
+    }
+  } catch (wsErr) {
+    console.error('Failed to broadcast payment update:', wsErr.message);
+  }
+};
+
 // Verify Razorpay Signature
 export const verifyRazorpayPayment = async (req, res) => {
   try {
@@ -123,6 +156,7 @@ export const verifyRazorpayPayment = async (req, res) => {
       .single();
 
     const amount = order ? order.total_amount : 0;
+    const nowStr = new Date().toISOString();
 
     // Handle Mock mode payment verification
     if (isMock) {
@@ -144,9 +178,21 @@ export const verifyRazorpayPayment = async (req, res) => {
             razorpay_order_id,
             razorpay_signature: 'mock_signature',
             amount,
-            status: 'success'
+            status: 'paid'
           }
         ]);
+
+      // Enrich rich metadata
+      setMetadata(orderId, {
+        payment_status: 'PAID',
+        payment_time: nowStr,
+        razorpay_transaction_id: razorpay_payment_id,
+        payment_method: 'Razorpay',
+        delivery_eta: '30 minutes',
+        metadata_status: 'pending' // Initial: "Order Placed"
+      });
+
+      await broadcastOrderUpdate(orderId);
 
       return res.json({ status: 'success', message: 'Mock payment verified successfully' });
     }
@@ -181,9 +227,21 @@ export const verifyRazorpayPayment = async (req, res) => {
             razorpay_order_id,
             razorpay_signature,
             amount,
-            status: 'success'
+            status: 'paid'
           }
         ]);
+
+      // Enrich rich metadata
+      setMetadata(orderId, {
+        payment_status: 'PAID',
+        payment_time: nowStr,
+        razorpay_transaction_id: razorpay_payment_id,
+        payment_method: 'Razorpay',
+        delivery_eta: '30 minutes',
+        metadata_status: 'pending'
+      });
+
+      await broadcastOrderUpdate(orderId);
 
       res.json({ status: 'success', message: 'Payment verified and captured successfully' });
     } else {
@@ -207,10 +265,127 @@ export const verifyRazorpayPayment = async (req, res) => {
           }
         ]);
 
+      // Enrich rich metadata
+      setMetadata(orderId, {
+        payment_status: 'FAILED',
+        failure_reason: 'Signature mismatch verification failure',
+        payment_method: 'Razorpay'
+      });
+
+      await broadcastOrderUpdate(orderId);
+
       res.status(400).json({ status: 'failure', error: 'Payment signature verification failed' });
     }
   } catch (err) {
     console.error('Error in verifyRazorpayPayment:', err);
     res.status(500).json({ error: 'Failed to verify payment' });
+  }
+};
+
+// Record Payment Failure Reason
+export const handlePaymentFailed = async (req, res) => {
+  try {
+    const { orderId, failureReason, razorpay_payment_id, razorpay_order_id } = req.body;
+    if (!orderId) {
+      return res.status(400).json({ error: 'Order ID is required' });
+    }
+
+    const { data: order } = await supabase
+      .from('orders')
+      .select('total_amount')
+      .eq('id', orderId)
+      .single();
+
+    const amount = order ? order.total_amount : 0;
+    const reason = failureReason || 'Transaction declined by issuer bank';
+
+    // 1. Update order payment status to failed
+    await supabase
+      .from('orders')
+      .update({ payment_status: 'failed' })
+      .eq('id', orderId);
+
+    // 2. Enrich order metadata
+    setMetadata(orderId, {
+      payment_status: 'FAILED',
+      failure_reason: reason,
+      payment_method: 'Razorpay'
+    });
+
+    // 3. Log failed transaction in payments table
+    await supabase
+      .from('payments')
+      .insert([
+        {
+          order_id: orderId,
+          razorpay_payment_id: razorpay_payment_id || 'failed_txn_none',
+          razorpay_order_id: razorpay_order_id || 'failed_order_none',
+          razorpay_signature: reason, // Store reason inside signature field as mapping fallback
+          amount,
+          status: 'failed'
+        }
+      ]);
+
+    // Broadcast live update
+    await broadcastOrderUpdate(orderId);
+
+    console.log(`[Payment Controller] Logged transaction failure for order ${orderId}: ${reason}`);
+    res.json({ status: 'success', message: 'Payment failure recorded successfully' });
+  } catch (err) {
+    console.error('Error in handlePaymentFailed:', err);
+    res.status(500).json({ error: 'Failed to record payment failure' });
+  }
+};
+
+// Record Payment Cancellation
+export const handlePaymentCancelled = async (req, res) => {
+  try {
+    const { orderId } = req.body;
+    if (!orderId) {
+      return res.status(400).json({ error: 'Order ID is required' });
+    }
+
+    const { data: order } = await supabase
+      .from('orders')
+      .select('total_amount')
+      .eq('id', orderId)
+      .single();
+
+    const amount = order ? order.total_amount : 0;
+
+    // 1. Update order payment status to failed
+    await supabase
+      .from('orders')
+      .update({ payment_status: 'failed' })
+      .eq('id', orderId);
+
+    // 2. Enrich order metadata
+    setMetadata(orderId, {
+      payment_status: 'CANCELLED',
+      payment_method: 'Razorpay'
+    });
+
+    // 3. Log cancelled transaction in payments table
+    await supabase
+      .from('payments')
+      .insert([
+        {
+          order_id: orderId,
+          razorpay_payment_id: 'cancelled_txn_none',
+          razorpay_order_id: 'User cancelled payment checkout modal',
+          razorpay_signature: 'CANCELLED',
+          amount,
+          status: 'failed'
+        }
+      ]);
+
+    // Broadcast live update
+    await broadcastOrderUpdate(orderId);
+
+    console.log(`[Payment Controller] Logged checkout cancellation for order ${orderId}`);
+    res.json({ status: 'success', message: 'Payment cancellation recorded successfully' });
+  } catch (err) {
+    console.error('Error in handlePaymentCancelled:', err);
+    res.status(500).json({ error: 'Failed to record payment cancellation' });
   }
 };
