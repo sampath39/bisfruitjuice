@@ -601,9 +601,6 @@ export default function Orders() {
         setConfirmedOrder(mockOrder);
         setMyOrders(prev => [mockOrder, ...prev]);
         clearCart();
-
-        // Trigger automatic timeline simulation steps
-        simulateTimeline(mockOrderId);
       } else {
         // Razorpay mock flow locally
         showToast('Initiating Simulated Online checkout...', 'info');
@@ -616,7 +613,6 @@ export default function Orders() {
           setConfirmedOrder(paidMockOrder);
           setMyOrders(prev => [paidMockOrder, ...prev]);
           clearCart();
-          simulateTimeline(mockOrderId);
         }, 1500);
       }
     } finally {
