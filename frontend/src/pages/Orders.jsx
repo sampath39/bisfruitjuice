@@ -212,11 +212,23 @@ export default function Orders() {
       if (ws) ws.close();
     };
   }, [user]);
-
   const fetchMyOrders = async () => {
     try {
       setLoadingOrders(true);
-      const res = await api.get('/orders/my');
+      
+      let url = '/orders/my';
+      if (!user) {
+        const savedIds = localStorage.getItem('bisfruitjuice_guest_orders');
+        const guestOrderIds = savedIds ? JSON.parse(savedIds) : [];
+        if (guestOrderIds.length === 0) {
+          setMyOrders([]);
+          setLoadingOrders(false);
+          return;
+        }
+        url = `/orders/my?ids=${guestOrderIds.join(',')}`;
+      }
+
+      const res = await api.get(url);
       setMyOrders(res.data);
     } catch (err) {
       console.warn('Could not load orders history:', err);
@@ -224,6 +236,7 @@ export default function Orders() {
       setLoadingOrders(false);
     }
   };
+
 
   // Auth Handlers
   const handleAuthSubmit = async (e) => {
@@ -410,6 +423,24 @@ export default function Orders() {
       if (paymentMethod === 'COD') {
         showToast('Order confirmed (Cash on Delivery)! 🎉', 'success');
         setConfirmedOrder(createdOrder);
+        
+        // Save guest order locally if guest
+        if (!user) {
+          const savedIds = localStorage.getItem('bisfruitjuice_guest_orders');
+          const guestOrderIds = savedIds ? JSON.parse(savedIds) : [];
+          if (!guestOrderIds.includes(createdOrder.id)) {
+            guestOrderIds.push(createdOrder.id);
+            localStorage.setItem('bisfruitjuice_guest_orders', JSON.stringify(guestOrderIds));
+          }
+        }
+
+        // Instant local state sync
+        setMyOrders((prev) => {
+          const exists = prev.some(o => o.id === createdOrder.id);
+          if (exists) return prev;
+          return [createdOrder, ...prev];
+        });
+
         clearCart();
         fetchMyOrders();
       } 
@@ -455,6 +486,24 @@ export default function Orders() {
                 };
                 
                 setConfirmedOrder(updatedOrder);
+
+                // Save guest order locally if guest
+                if (!user) {
+                  const savedIds = localStorage.getItem('bisfruitjuice_guest_orders');
+                  const guestOrderIds = savedIds ? JSON.parse(savedIds) : [];
+                  if (!guestOrderIds.includes(updatedOrder.id)) {
+                    guestOrderIds.push(updatedOrder.id);
+                    localStorage.setItem('bisfruitjuice_guest_orders', JSON.stringify(guestOrderIds));
+                  }
+                }
+
+                // Instant local state sync
+                setMyOrders((prev) => {
+                  const exists = prev.some(o => o.id === updatedOrder.id);
+                  if (exists) return prev;
+                  return [updatedOrder, ...prev];
+                });
+
                 clearCart();
                 fetchMyOrders();
               } else {
@@ -591,11 +640,103 @@ export default function Orders() {
             </div>
           </div>
 
+          {/* Live Progress Timeline inside Confirmation Receipt */}
+          {['pending', 'accepted', 'preparing', 'out_for_delivery'].includes(confirmedOrder.order_status) && (
+            <div className="bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200/20 p-4 rounded-2xl flex items-center gap-2.5 text-xs text-blue-750 dark:text-blue-350 text-left animate-fadeIn">
+              <Clock className="w-5 h-5 shrink-0 animate-spin-slow text-primary" />
+              <div>
+                <p className="font-bold text-sm">Estimated Arrival: 30 minutes</p>
+                <p className="text-[10px] text-slate-550 dark:text-slate-400 mt-0.5">Your fresh juices are currently being blended & prepared!</p>
+              </div>
+            </div>
+          )}
+
+          {confirmedOrder.order_status === 'otp_pending' && confirmedOrder.otp_code && (
+            <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-250/25 p-4.5 rounded-2xl flex flex-col gap-2.5 text-xs text-left animate-fadeIn">
+              <div className="flex items-center gap-2 font-bold text-amber-800 dark:text-amber-300">
+                <Lock className="w-4.5 h-4.5 shrink-0 text-amber-500" />
+                <span className="text-sm">Verify Delivery via OTP</span>
+              </div>
+              <p className="text-slate-655 dark:text-slate-400 leading-relaxed text-xs">
+                Provide the 4-digit code below to the delivery partner to verify checkout & close transaction.
+              </p>
+              <div className="flex items-center gap-2 bg-white dark:bg-slate-900 border border-amber-200/40 p-2.5 rounded-xl w-fit">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">SMS Simulator OTP:</span>
+                <span className="font-mono text-base font-extrabold text-amber-600 dark:text-amber-400 tracking-widest">{confirmedOrder.otp_code}</span>
+              </div>
+            </div>
+          )}
+
+          <div className="border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/10 p-5 rounded-2xl text-left space-y-4">
+            <div className="flex justify-between items-center pb-2 border-b border-slate-100 dark:border-slate-850">
+              <h3 className="font-semibold text-slate-850 dark:text-white text-xs uppercase tracking-wider">Live Delivery Status</h3>
+              <span className="inline-flex items-center gap-1.5 text-[9px] font-bold text-primary bg-green-50 dark:bg-green-950/40 px-2 py-0.5 rounded-full">
+                <span className="w-1.5 h-1.5 rounded-full bg-primary animate-ping" /> Realtime Live
+              </span>
+            </div>
+
+            <div className="space-y-4.5 pl-1.5 pt-2">
+              {[
+                { key: 'pending', label: 'Order Placed', desc: 'Received by Bismilla shop' },
+                { key: 'accepted', label: 'Accepted by Shop', desc: 'Confirmed by Imran' },
+                { key: 'preparing', label: 'Preparing Juice', desc: 'Fresh fruits blending now' },
+                { key: 'out_for_delivery', label: 'Out for Delivery', desc: 'Partner on the way' },
+                { key: 'otp_pending', label: 'OTP Verification', desc: 'Tell OTP to partner' },
+                { key: 'delivered', label: 'Delivered', desc: 'Enjoy your fresh juice!' }
+              ].map((step, idx) => {
+                const currentStep = getOrderStatusStep(confirmedOrder.order_status);
+                const isCompleted = idx < currentStep;
+                const isActive = idx === currentStep;
+                const isRejected = confirmedOrder.order_status === 'rejected';
+
+                return (
+                  <div key={step.key} className="flex gap-3.5 text-xs relative">
+                    {idx < 5 && (
+                      <div className={`w-0.5 absolute left-[8px] top-[18px] bottom-[-22px] -z-10 ${
+                        idx < currentStep ? 'bg-primary' : 'bg-slate-200 dark:bg-slate-800'
+                      }`} />
+                    )}
+
+                    <div className={`w-4.5 h-4.5 rounded-full flex items-center justify-center border-2 shrink-0 z-10 transition-colors ${
+                      isRejected && idx > 0
+                        ? 'border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950 text-slate-350'
+                        : isCompleted
+                        ? 'border-primary bg-primary text-white'
+                        : isActive
+                        ? 'border-primary bg-white dark:bg-slate-900 text-primary'
+                        : 'border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950 text-slate-300'
+                    }`}>
+                      {isCompleted ? (
+                        <Check className="w-2.5 h-2.5 stroke-[3]" />
+                      ) : (
+                        <div className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-primary animate-pulse' : 'bg-transparent'}`} />
+                      )}
+                    </div>
+
+                    <div className="space-y-0.5">
+                      <p className={`font-semibold text-xs ${
+                        isRejected && idx > 0
+                          ? 'text-slate-400 line-through'
+                          : isActive
+                          ? 'text-primary font-bold'
+                          : isCompleted
+                          ? 'text-slate-850 dark:text-slate-200'
+                          : 'text-slate-400 dark:text-slate-550'
+                      }`}>
+                        {step.label} {isRejected && idx === 1 && <span className="text-rose-500 font-bold font-sans">(REJECTED)</span>}
+                      </p>
+                      <p className="text-[10px] text-slate-450 dark:text-slate-500">{step.desc}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
           {/* Action Row */}
           <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
             <a
               href={getWhatsAppShareLink(confirmedOrder)}
-              target="_blank"
               rel="noopener noreferrer"
               className="btn-primary py-3 px-8 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 bg-green-500 hover:bg-green-600"
             >

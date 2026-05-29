@@ -17,7 +17,7 @@ const router = express.Router();
 // Customer/Public routes
 router.post('/verify-distance', verifyDeliveryDistance);
 router.post('/', optionalAuth, createOrder);  // Allow guest orders
-router.get('/my', requireAuth, getMyOrders);
+router.get('/my', optionalAuth, getMyOrders);
 
 
 // Admin-only routes

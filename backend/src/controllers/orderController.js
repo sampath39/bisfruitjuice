@@ -270,13 +270,46 @@ export const createOrder = async (req, res) => {
     res.status(500).json({ error: 'Failed to create order' });
   }
 };
-
-// Get orders for current user
+// Get orders for current user or guest (based on ids query param)
 export const getMyOrders = async (req, res) => {
   try {
     if (isMockMode) {
-      // In mock mode, return all in-memory orders associated with the user
+      if (!req.user) {
+        const guestOrderIds = req.query.ids ? req.query.ids.split(',') : [];
+        if (guestOrderIds.length === 0) return res.json([]);
+        return res.json(inMemoryOrders.filter(o => guestOrderIds.includes(o.id)));
+      }
       return res.json(inMemoryOrders);
+    }
+
+    if (!req.user) {
+      // Guest mode: fetch orders matching the given IDs
+      const guestOrderIds = req.query.ids ? req.query.ids.split(',') : [];
+      if (guestOrderIds.length === 0) {
+        return res.json([]);
+      }
+      
+      const { data: orders, error } = await supabase
+        .from('orders')
+        .select(`
+          *,
+          order_items (
+            id,
+            quantity,
+            price_at_order,
+            products (
+              id,
+              name,
+              image_url,
+              category
+            )
+          )
+        `)
+        .in('id', guestOrderIds)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return res.json(orders);
     }
 
     const userId = req.user.id;
@@ -306,6 +339,7 @@ export const getMyOrders = async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch your orders' });
   }
 };
+
 
 // Admin: Get all orders
 export const getAllOrders = async (req, res) => {

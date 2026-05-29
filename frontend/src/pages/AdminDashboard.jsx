@@ -205,6 +205,32 @@ export default function AdminDashboard() {
     };
   }, [user, isAdmin]);
 
+  // Periodic background check fallback (every 10 seconds)
+  useEffect(() => {
+    if (!user || !isAdmin) return;
+    const interval = setInterval(() => {
+      silentReloadMetrics();
+      // Fetch fresh orders
+      api.get('/orders').then((res) => {
+        if (res.data) {
+          setOrdersList((prev) => {
+            // Merge lists cleanly to avoid losing new orders in real-time
+            const merged = [...res.data];
+            prev.forEach(item => {
+              if (!merged.some(o => o.id === item.id)) {
+                merged.push(item);
+              }
+            });
+            // Sort by created_at descending
+            return merged.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+          });
+        }
+      }).catch(() => {});
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, [user, isAdmin]);
+
   const loadDashboardData = async () => {
     try {
       setLoading(true);
