@@ -899,24 +899,6 @@ export default function AdminDashboard() {
 
                               {order.order_status === 'accepted' && (
                                 <button
-                                  onClick={() => handleOrderStatusUpdate(order.id, 'preparing')}
-                                  className="px-2.5 py-1.5 bg-indigo-500 text-white font-bold text-[10px] rounded-lg shadow-sm hover:bg-indigo-600 transition-all"
-                                >
-                                  Start Preparing
-                                </button>
-                              )}
-
-                              {order.order_status === 'preparing' && (
-                                <button
-                                  onClick={() => handleOrderStatusUpdate(order.id, 'out_for_delivery')}
-                                  className="px-2.5 py-1.5 bg-orange-500 text-white font-bold text-[10px] rounded-lg shadow-sm hover:bg-orange-600 transition-all"
-                                >
-                                  Out for Delivery
-                                </button>
-                              )}
-
-                              {order.order_status === 'out_for_delivery' && (
-                                <button
                                   onClick={() => handleSendOtp(order.id)}
                                   className="px-2.5 py-1.5 bg-purple-600 text-white font-bold text-[10px] rounded-lg shadow-sm hover:bg-purple-700 transition-all"
                                 >

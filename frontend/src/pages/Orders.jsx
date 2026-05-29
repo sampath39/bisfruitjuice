@@ -736,36 +736,40 @@ export default function Orders() {
   };
 
   const simulateTimeline = (orderId) => {
-    console.log('⏰ Starting local timeline simulation for order:', orderId);
-    
-    const statuses = ['accepted', 'otp_pending'];
-    
-    statuses.forEach((status, index) => {
-      setTimeout(() => {
-        setConfirmedOrder(prev => {
-          if (!prev || prev.id !== orderId) return prev;
-          
-          let updated = { ...prev, order_status: status, updated_at: new Date().toISOString() };
-          
-          if (status === 'otp_pending') {
-            updated.otp_code = '7777';
-          }
-          
-          return updated;
-        });
+    console.log('⏰ Local manual timeline controller activated for order:', orderId);
+  };
 
-        setMyOrders(prev => prev.map(o => {
-          if (o.id !== orderId) return o;
-          let updated = { ...o, order_status: status, updated_at: new Date().toISOString() };
-          if (status === 'otp_pending') {
-            updated.otp_code = '7777';
-          }
-          return updated;
-        }));
-
-        showToast(`Order status updated to: ${status.replace(/_/g, ' ').toUpperCase()}`, 'info');
-      }, (index + 1) * 5000);
+  const handleUpdateSimulatedStatus = (orderId, newStatus) => {
+    setConfirmedOrder(prev => {
+      if (!prev || prev.id !== orderId) return prev;
+      let updated = { ...prev, order_status: newStatus, updated_at: new Date().toISOString() };
+      if (newStatus === 'otp_pending') {
+        updated.otp_code = '7777';
+        showToast('Mock SMS: Verification OTP code is 7777', 'success');
+      }
+      if (newStatus === 'delivered') {
+        updated.otp_verified = true;
+        updated.payment_status = 'paid';
+        updated.delivered_at = new Date().toISOString();
+      }
+      return updated;
     });
+
+    setMyOrders(prev => prev.map(o => {
+      if (o.id !== orderId) return o;
+      let updated = { ...o, order_status: newStatus, updated_at: new Date().toISOString() };
+      if (newStatus === 'otp_pending') {
+        updated.otp_code = '7777';
+      }
+      if (newStatus === 'delivered') {
+        updated.otp_verified = true;
+        updated.payment_status = 'paid';
+        updated.delivered_at = new Date().toISOString();
+      }
+      return updated;
+    }));
+
+    showToast(`Simulated status updated to: ${newStatus.toUpperCase()}`, 'info');
   };
 
   const handleVerifySimulatedOtp = (orderId, isFromHistoryList = false) => {
@@ -947,6 +951,51 @@ export default function Orders() {
               </div>
             </div>
           </div>
+
+          {/* Mock Offline Simulation Workflow Controller */}
+          {confirmedOrder.id.startsWith('ord_sim_') && !['delivered', 'rejected'].includes(confirmedOrder.order_status) && (
+            <div className="bg-amber-500/5 dark:bg-amber-950/10 border border-amber-500/20 p-5 rounded-2xl text-left space-y-3 animate-fadeIn">
+              <div className="flex items-center justify-between border-b border-amber-500/10 pb-2">
+                <div className="flex items-center gap-2 font-bold text-amber-800 dark:text-amber-300 text-xs uppercase tracking-wider">
+                  <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
+                  Mock Timeline Controller (Manual Mode)
+                </div>
+                <span className="text-[9px] font-extrabold text-amber-600 bg-amber-100 dark:bg-amber-950/30 px-2 py-0.5 rounded-full uppercase">Offline Simulator</span>
+              </div>
+              <p className="text-[10px] text-slate-550 dark:text-slate-400 leading-normal">
+                Because this order is simulated offline, you can manually trigger shop actions below to test how the timeline, notifications, and OTP widgets change!
+              </p>
+              <div className="flex flex-wrap gap-2 pt-1">
+                {confirmedOrder.order_status === 'pending' && (
+                  <>
+                    <button
+                      onClick={() => handleUpdateSimulatedStatus(confirmedOrder.id, 'accepted')}
+                      className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-[10px] rounded-lg transition-all shadow-sm"
+                    >
+                      Simulate Shop Accept
+                    </button>
+                    <button
+                      onClick={() => handleUpdateSimulatedStatus(confirmedOrder.id, 'rejected')}
+                      className="px-3 py-1.5 bg-rose-500 hover:bg-rose-600 text-white font-bold text-[10px] rounded-lg transition-all shadow-sm"
+                    >
+                      Simulate Shop Reject
+                    </button>
+                  </>
+                )}
+                {confirmedOrder.order_status === 'accepted' && (
+                  <button
+                    onClick={() => handleUpdateSimulatedStatus(confirmedOrder.id, 'otp_pending')}
+                    className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white font-bold text-[10px] rounded-lg transition-all shadow-sm"
+                  >
+                    Simulate Driver Send OTP
+                  </button>
+                )}
+                {confirmedOrder.order_status === 'otp_pending' && (
+                  <span className="text-[10px] font-semibold text-slate-400">Use the OTP input box below to verify code & complete delivery!</span>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Live Progress Timeline inside Confirmation Receipt */}
           {['pending', 'accepted'].includes(confirmedOrder.order_status) && (
