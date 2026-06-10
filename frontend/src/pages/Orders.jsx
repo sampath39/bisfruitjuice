@@ -24,14 +24,15 @@ import {
   LogOut,
   X,
   Truck,
-  ThumbsUp
+  ThumbsUp,
+  Smartphone
 } from 'lucide-react';
 import api from '../utils/api.js';
 import { calculateDistance, SHOP_LOCATION, reverseGeocode } from '../utils/location.js';
 
 export default function Orders() {
   const { user, signIn, signUp, signOut, loading: authLoading } = useAuth();
-  const { cartItems, cartTotal, clearCart } = useCart();
+  const { cartItems, cartTotal, clearCart, addToCart } = useCart();
   const { showToast } = useToast();
   const location = useLocation();
 
@@ -79,6 +80,7 @@ export default function Orders() {
   const [discountAmount, setDiscountAmount] = useState(0);
   const [couponError, setCouponError] = useState('');
   const [couponSuccess, setCouponSuccess] = useState('');
+  const [activePageTab, setActivePageTab] = useState(cartItems?.length > 0 ? 'checkout' : 'tracking');
 
   const finalTotal = parseFloat(Math.max(0, cartTotal - discountAmount).toFixed(2));
 
@@ -144,6 +146,11 @@ export default function Orders() {
     let ws;
     let reconnectTimeout;
 
+    const getGuestOrderIds = () => {
+      const savedIds = localStorage.getItem('bisfruitjuice_guest_orders');
+      return savedIds ? JSON.parse(savedIds) : [];
+    };
+
     const connect = () => {
       ws = new WebSocket(socketUrl);
 
@@ -158,37 +165,69 @@ export default function Orders() {
           if (data.type === 'ORDER_UPDATED') {
             const updated = data.order;
             
-            // Check if order exists in myOrders
-            setMyOrders((prev) => {
-              const exists = prev.some(o => o.id === updated.id);
-              if (exists) {
-                showToast(`Order #${updated.id.substring(0, 8)} status: ${updated.order_status.replace(/_/g, ' ').toUpperCase()}`, 'info');
-                return prev.map(o => o.id === updated.id ? updated : o);
-              }
-              // If guest placed order, they might not be authenticated but order is in memory
-              const isGuestToken = localStorage.getItem('supabase_auth_token')?.startsWith('mock_token_jwt_customer');
-              if (isGuestToken || !user) {
-                return prev.map(o => o.id === updated.id ? updated : o);
-              }
-              return prev;
-            });
+            // Verify ownership
+            let isMyOrder = false;
+            if (user) {
+              isMyOrder = updated.user_id === user.id;
+            } else {
+              const guestOrderIds = getGuestOrderIds();
+              isMyOrder = guestOrderIds.includes(updated.id);
+            }
 
-            // Also check if matches currently open tracking modal/confirmation
-            setConfirmedOrder((prev) => {
-              if (prev && prev.id === updated.id) {
-                return updated;
-              }
-              return prev;
-            });
+            if (isMyOrder) {
+              setMyOrders((prev) => {
+                const prevOrder = prev.find(o => o.id === updated.id);
+                const exists = !!prevOrder;
+                
+                if (exists) {
+                  // status-specific descriptive toasts
+                  let statusMsg = `Order #${updated.id.substring(0, 8)} status is now ${updated.order_status.replace(/_/g, ' ').toUpperCase()}`;
+                  if (updated.order_status === 'accepted') {
+                    statusMsg = `Order #${updated.id.substring(0, 8)} accepted by Imran! 🍊`;
+                  } else if (updated.order_status === 'otp_pending') {
+                    statusMsg = `Delivery partner arrived! Please verify via OTP. 🔑`;
+                  } else if (updated.order_status === 'delivered') {
+                    statusMsg = `Order delivered! Enjoy your fresh fruit juice. 🎉`;
+                  } else if (updated.order_status === 'rejected') {
+                    statusMsg = `Order #${updated.id.substring(0, 8)} was rejected.`;
+                  }
+
+                  showToast(statusMsg, updated.order_status === 'rejected' ? 'error' : updated.order_status === 'delivered' ? 'success' : 'info');
+
+                  if (updated.order_status === 'delivered' && prevOrder.order_status !== 'delivered') {
+                    setActivePageTab('history');
+                  }
+                  
+                  return prev.map(o => o.id === updated.id ? updated : o);
+                }
+                return [updated, ...prev];
+              });
+
+              // Also check if matches currently open tracking modal/confirmation
+              setConfirmedOrder((prev) => {
+                if (prev && prev.id === updated.id) {
+                  return updated;
+                }
+                return prev;
+              });
+            }
           }
           
           if (data.type === 'NEW_ORDER') {
-            const isMyOrder = user ? (data.order.user_id === user.id) : true;
+            const newOrder = data.order;
+            let isMyOrder = false;
+            if (user) {
+              isMyOrder = newOrder.user_id === user.id;
+            } else {
+              const guestOrderIds = getGuestOrderIds();
+              isMyOrder = guestOrderIds.includes(newOrder.id);
+            }
+
             if (isMyOrder) {
               setMyOrders((prev) => {
-                const exists = prev.some(o => o.id === data.order.id);
+                const exists = prev.some(o => o.id === newOrder.id);
                 if (exists) return prev;
-                return [data.order, ...prev];
+                return [newOrder, ...prev];
               });
             }
           }
@@ -213,6 +252,7 @@ export default function Orders() {
       if (ws) ws.close();
     };
   }, [user]);
+
   const fetchMyOrders = async () => {
     try {
       setLoadingOrders(true);
@@ -334,7 +374,7 @@ export default function Orders() {
       },
       (error) => {
         console.error('Geolocation fetch error:', error);
-        showToast('Failed to fetch your location. Please allow location permission and try again.', 'error');
+        showToast('Failed to fetch your location. Please allow location permission or use simulator buttons.', 'error');
         setCheckingLocation(false);
       },
       { enableHighAccuracy: true, timeout: 8000 }
@@ -444,6 +484,7 @@ export default function Orders() {
 
         clearCart();
         fetchMyOrders();
+        setActivePageTab('tracking');
       } 
       // 3. Razorpay flow
       else {
@@ -507,6 +548,7 @@ export default function Orders() {
 
                 clearCart();
                 fetchMyOrders();
+                setActivePageTab('tracking');
               } else {
                 showToast('Payment verification failed.', 'error');
               }
@@ -537,6 +579,7 @@ export default function Orders() {
               });
               clearCart();
               fetchMyOrders();
+              setActivePageTab('tracking');
             }
           }
         };
@@ -561,6 +604,7 @@ export default function Orders() {
           });
           clearCart();
           fetchMyOrders();
+          setActivePageTab('tracking');
         });
 
         razorpayInstance.open();
@@ -705,20 +749,20 @@ export default function Orders() {
     const isCancelled = order.payment_status === 'CANCELLED';
 
     let text = order.payment_status;
-    let className = 'bg-amber-50 text-amber-705 border border-amber-200/20 dark:bg-amber-950/20 dark:text-amber-450';
+    let className = 'bg-amber-50 text-amber-705 border border-amber-200/20 dark:bg-amber-955/20 dark:text-amber-450';
 
     if (isCOD) {
       if (isPaid) {
         text = 'Payment Completed';
-        className = 'bg-gradient-to-r from-emerald-500/10 to-teal-500/10 text-emerald-600 border border-emerald-500/20 dark:from-emerald-950/20 dark:to-teal-950/20 dark:text-emerald-400';
+        className = 'bg-gradient-to-r from-emerald-500/10 to-teal-500/10 text-emerald-600 border border-emerald-500/20 dark:from-emerald-950/20 dark:to-teal-955/20 dark:text-emerald-400';
       } else {
         text = 'Payment Pending';
-        className = 'bg-amber-50 text-amber-705 border border-amber-200/20 dark:bg-amber-950/20 dark:text-amber-450';
+        className = 'bg-amber-50 text-amber-705 border border-amber-200/20 dark:bg-amber-955/20 dark:text-amber-450';
       }
     } else { // UPI / Razorpay
       if (isPaid) {
         text = 'Paid Successfully';
-        className = 'bg-gradient-to-r from-emerald-500/10 to-teal-500/10 text-emerald-600 border border-emerald-500/20 dark:from-emerald-950/20 dark:to-teal-950/20 dark:text-emerald-400';
+        className = 'bg-gradient-to-r from-emerald-500/10 to-teal-500/10 text-emerald-600 border border-emerald-500/20 dark:from-emerald-950/20 dark:to-teal-955/20 dark:text-emerald-400';
       } else if (isFailed) {
         text = 'Payment Failed';
         className = 'bg-gradient-to-r from-rose-500/10 to-pink-500/10 text-rose-600 border border-rose-500/25 dark:from-rose-950/20 dark:to-pink-950/20 dark:text-rose-400';
@@ -727,7 +771,7 @@ export default function Orders() {
         className = 'bg-slate-100 text-slate-600 border border-slate-200/25 dark:bg-slate-900 dark:text-slate-400';
       } else {
         text = 'Payment Pending';
-        className = 'bg-amber-50 text-amber-705 border border-amber-200/20 dark:bg-amber-950/20 dark:text-amber-450';
+        className = 'bg-amber-50 text-amber-705 border border-amber-200/20 dark:bg-amber-955/20 dark:text-amber-450';
       }
     }
 
@@ -738,17 +782,45 @@ export default function Orders() {
     );
   };
 
+  const activeOrders = myOrders.filter(o => 
+    ['pending', 'accepted', 'otp_pending'].includes(o.order_status)
+  );
+  const pastOrders = myOrders.filter(o => 
+    ['delivered', 'rejected', 'cancelled'].includes(o.order_status)
+  );
+
+  const totalSpent = pastOrders
+    .filter(o => o.order_status === 'delivered')
+    .reduce((sum, o) => sum + parseFloat(o.total_amount), 0);
+  const totalDeliveries = pastOrders.filter(o => o.order_status === 'delivered').length;
+
+  const handleReorder = (order) => {
+    if (!order.order_items || order.order_items.length === 0) return;
+    order.order_items.forEach(item => {
+      if (item.products) {
+        addToCart({
+          id: item.products.id,
+          name: item.products.name,
+          price: item.price_at_order || item.products.price || 80,
+          category: item.products.category
+        }, item.quantity);
+      }
+    });
+    setActivePageTab('checkout');
+    showToast('Items added back to your cart! 🛍️', 'success');
+  };
+
   return (
-    <div className="max-w-7xl mx-auto px-6 py-12 flex flex-col gap-10 min-h-[85vh] text-left">
+    <div className="max-w-7xl mx-auto px-6 py-12 flex flex-col gap-8 min-h-[85vh] text-left">
       
-      {/* HEADER ROW WITH LOGIN STATUS FOR GUESTS */}
+      {/* HEADER ROW WITH LOGIN STATUS */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-4 border-b border-slate-100 dark:border-slate-800">
         <div>
           <h1 className="font-display text-3xl font-extrabold text-slate-900 dark:text-white">
-            Juice Checkout
+            Juice Bar Portal
           </h1>
           <p className="text-slate-500 text-xs mt-1">
-            Complete your details and place your natural fresh juices order.
+            Place orders, track live status, and view your juice purchase history.
           </p>
         </div>
 
@@ -766,7 +838,7 @@ export default function Orders() {
           </button>
         ) : (
           <div className="flex items-center gap-3">
-            <span className="text-xs text-slate-500 font-medium">Logged in as: <strong className="text-slate-800 dark:text-slate-200">{user.full_name}</strong></span>
+            <span className="text-xs text-slate-505 font-medium">Logged in as: <strong className="text-slate-800 dark:text-slate-200">{user.full_name}</strong></span>
             <button
               onClick={signOut}
               className="text-xs text-rose-500 font-bold hover:underline flex items-center gap-1"
@@ -777,227 +849,74 @@ export default function Orders() {
         )}
       </div>
 
-      {/* 2. ORDER CONFIRMED SCREEN */}
-      {confirmedOrder ? (
-        <div className="max-w-2xl mx-auto w-full glass-card p-8 sm:p-10 rounded-3xl text-center border border-slate-100 dark:border-slate-850 shadow-xl space-y-6">
-          <div className="flex justify-center">
-            {confirmedOrder.order_status === 'rejected' ? (
-              <span className="p-4 bg-rose-150 text-rose-600 rounded-full shadow-md animate-pulse">
-                <XCircle className="w-12 h-12" />
-              </span>
-            ) : (
-              <span className="p-4 bg-emerald-100 dark:bg-emerald-950/60 text-primary rounded-full shadow-md animate-bounce-slow">
-                <CheckCircle2 className="w-12 h-12" />
-              </span>
-            )}
-          </div>
-
-          <div className="space-y-2">
-            {confirmedOrder.order_status === 'rejected' ? (
-              <>
-                <h2 className="text-2xl sm:text-3xl font-display font-bold text-rose-600 dark:text-rose-400">Order Rejected!</h2>
-                <p className="text-xs text-rose-500 font-medium">Unfortunately, this order has been rejected by the shop.</p>
-              </>
-            ) : (
-              <>
-                <h2 className="text-2xl sm:text-3xl font-display font-bold text-slate-900 dark:text-white">Order Confirmed!</h2>
-                <p className="text-xs text-slate-500">Your order has been received and is being prepared with 100% pure fruits.</p>
-              </>
-            )}
-          </div>
-
-          {/* Receipt Info card */}
-          <div className="border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/20 p-5 rounded-2xl text-left space-y-4">
-            <div className="flex justify-between items-center text-xs border-b border-slate-100 dark:border-slate-800 pb-3 font-semibold text-slate-850 dark:text-slate-200">
-              <span>Order ID: #{confirmedOrder.id.substring(0, 8)}</span>
-              <span>Total amount: ₹{parseFloat(confirmedOrder.total_amount).toFixed(2)}</span>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4 text-xs">
-              <div className="space-y-1">
-                <span className="text-[10px] text-slate-400 font-semibold block uppercase">Delivery Location</span>
-                <span className="font-semibold text-slate-700 dark:text-slate-200 line-clamp-2 leading-relaxed">{confirmedOrder.delivery_address}</span>
-              </div>
-              <div className="space-y-1">
-                <span className="text-[10px] text-slate-400 font-semibold block uppercase">Contact Details</span>
-                <span className="font-semibold text-slate-700 dark:text-slate-200">{confirmedOrder.customer_name} ({confirmedOrder.customer_mobile})</span>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4 text-xs border-t border-slate-100 dark:border-slate-850 pt-3">
-              <div className="space-y-1">
-                <span className="text-[10px] text-slate-400 font-semibold block uppercase">Payment Method</span>
-                <span className="font-bold text-slate-700 dark:text-slate-250 uppercase">{confirmedOrder.payment_method}</span>
-              </div>
-              <div className="space-y-1">
-                <span className="text-[10px] text-slate-400 font-semibold block uppercase">Payment Status</span>
-                <div className="flex items-center gap-2 mt-0.5">
-                  {getPaymentStatusBadge(confirmedOrder)}
-                  {(confirmedOrder.payment_method === 'Razorpay' && 
-                    ['FAILED', 'CANCELLED', 'failed'].includes(confirmedOrder.payment_status)) && (
-                    <button
-                      type="button"
-                      onClick={() => handleRetryPayment(confirmedOrder)}
-                      className="bg-primary hover:bg-green-600 text-white text-[9px] font-extrabold px-2.5 py-0.5 rounded-full transition-all shadow-sm flex items-center gap-1 animate-pulse"
-                    >
-                      <CreditCard className="w-2.5 h-2.5" /> Retry Pay
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {confirmedOrder.order_status === 'rejected' && (
-            <div className="bg-rose-500/5 dark:bg-rose-950/10 border border-rose-500/25 p-5 rounded-2xl text-left space-y-2.5 animate-fadeIn">
-              <div className="flex items-center gap-2 font-bold text-rose-800 dark:text-rose-400">
-                <XCircle className="w-5 h-5 text-rose-500" />
-                <span className="text-sm">This Order Has Been Rejected</span>
-              </div>
-              <p className="text-rose-700 dark:text-rose-350 leading-relaxed text-xs">
-                Unfortunately, Imran at Bismilla Fruit Juice Shop was unable to confirm or fulfill your order at this time. 
-                If you made a payment online via Razorpay or UPI, your amount will be **refunded fully to your original payment source within 2-3 business days**.
-              </p>
-              <p className="text-[10px] text-slate-550 dark:text-slate-450">
-                Please feel free to go back to the menu and choose another juice, or query our support team on WhatsApp.
-              </p>
-            </div>
+      {/* PAGE TABS NAVIGATOR */}
+      <div className="flex flex-wrap gap-2 border-b border-slate-100 dark:border-slate-800">
+        <button
+          onClick={() => setActivePageTab('checkout')}
+          className={`flex items-center gap-2 py-3 px-5 border-b-2 font-medium text-xs sm:text-sm transition-all ${
+            activePageTab === 'checkout'
+              ? 'border-primary text-primary font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-350'
+          }`}
+        >
+          <ShoppingBag className="w-4 h-4" />
+          Checkout & Place Order
+          {cartItems.length > 0 && (
+            <span className="ml-1.5 px-2 py-0.5 text-[9px] font-extrabold bg-primary text-white rounded-full">
+              {cartItems.length}
+            </span>
           )}
-
-          {/* Live Progress Timeline inside Confirmation Receipt */}
-          {['pending', 'accepted'].includes(confirmedOrder.order_status) && (
-            <div className="bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200/20 p-4 rounded-2xl flex items-center gap-2.5 text-xs text-blue-750 dark:text-blue-350 text-left animate-fadeIn">
-              <Clock className="w-5 h-5 shrink-0 animate-spin-slow text-primary" />
-              <div>
-                <p className="font-bold text-sm">Estimated Arrival: 30 minutes</p>
-                <p className="text-[10px] text-slate-550 dark:text-slate-400 mt-0.5">Your fresh juices are currently being blended & prepared!</p>
-              </div>
-            </div>
+        </button>
+        
+        <button
+          onClick={() => setActivePageTab('tracking')}
+          className={`flex items-center gap-2 py-3 px-5 border-b-2 font-medium text-xs sm:text-sm transition-all ${
+            activePageTab === 'tracking'
+              ? 'border-primary text-primary font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-350'
+          }`}
+        >
+          <Truck className="w-4 h-4" />
+          Active Tracking
+          {activeOrders.length > 0 && (
+            <span className="ml-1.5 px-2 py-0.5 text-[9px] font-extrabold bg-blue-500 text-white rounded-full animate-pulse">
+              {activeOrders.length}
+            </span>
           )}
-
-          {confirmedOrder.order_status === 'otp_pending' && (
-            <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-300/30 p-4.5 rounded-2xl flex flex-col gap-3 text-xs text-left animate-fadeIn">
-              <div className="flex items-center gap-2 font-bold text-amber-800 dark:text-amber-300">
-                <Smartphone className="w-4.5 h-4.5 shrink-0 text-amber-500" />
-                <span className="text-sm">Delivery OTP Sent!</span>
-              </div>
-              <p className="text-slate-600 dark:text-slate-400 leading-relaxed">
-                A 4-digit verification code has been sent to your registered mobile number
-                <strong className="text-slate-800 dark:text-slate-200"> {confirmedOrder.customer_mobile}</strong>.
-              </p>
-              <div className="bg-amber-100/60 dark:bg-amber-950/40 border border-amber-200/50 rounded-xl p-3 flex items-start gap-2.5">
-                <span className="text-amber-600 font-extrabold text-base mt-0.5">📲</span>
-                <p className="text-amber-800 dark:text-amber-300 font-semibold text-[11px] leading-relaxed">
-                  When our delivery partner arrives, <strong>tell them the OTP from your SMS</strong>.
-                  They will enter it to confirm delivery and complete the transaction.
-                </p>
-              </div>
-            </div>
+        </button>
+        
+        <button
+          onClick={() => setActivePageTab('history')}
+          className={`flex items-center gap-2 py-3 px-5 border-b-2 font-medium text-xs sm:text-sm transition-all ${
+            activePageTab === 'history'
+              ? 'border-primary text-primary font-bold'
+              : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-350'
+          }`}
+        >
+          <ClipboardList className="w-4 h-4" />
+          Order History
+          {pastOrders.length > 0 && (
+            <span className="ml-1.5 px-2 py-0.5 text-[9px] font-extrabold bg-slate-200 dark:bg-slate-800 text-slate-650 rounded-full">
+              {pastOrders.length}
+            </span>
           )}
+        </button>
+      </div>
 
-          <div className="border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/10 p-5 rounded-2xl text-left space-y-4">
-            <div className="flex justify-between items-center pb-2 border-b border-slate-100 dark:border-slate-850">
-              <h3 className="font-semibold text-slate-850 dark:text-white text-xs uppercase tracking-wider">Live Delivery Status</h3>
-              <span className="inline-flex items-center gap-1.5 text-[9px] font-bold text-primary bg-green-50 dark:bg-green-950/40 px-2 py-0.5 rounded-full">
-                <span className="w-1.5 h-1.5 rounded-full bg-primary animate-ping" /> Realtime Live
-              </span>
-            </div>
-
-            <div className="space-y-4.5 pl-1.5 pt-2">
-              {[
-                { key: 'pending', label: 'Order Placed', desc: 'Received by Bismilla shop' },
-                { key: 'accepted', label: 'Accepted by Shop', desc: 'Confirmed by Imran' },
-                { key: 'otp_pending', label: 'OTP Verification', desc: 'Tell OTP to partner' },
-                { key: 'delivered', label: 'Delivered', desc: 'Enjoy your fresh juice!' }
-              ].map((step, idx) => {
-                const currentStep = getOrderStatusStep(confirmedOrder.order_status);
-                const isCompleted = idx < currentStep;
-                const isActive = idx === currentStep;
-                const isRejected = confirmedOrder.order_status === 'rejected';
-
-                return (
-                  <div key={step.key} className="flex gap-3.5 text-xs relative">
-                    {idx < 3 && (
-                      <div className={`w-0.5 absolute left-[8px] top-[18px] bottom-[-22px] -z-10 ${
-                        idx < currentStep ? 'bg-primary' : 'bg-slate-200 dark:bg-slate-800'
-                      }`} />
-                    )}
-
-                    <div className={`w-4.5 h-4.5 rounded-full flex items-center justify-center border-2 shrink-0 z-10 transition-colors ${
-                      isRejected && idx > 0
-                        ? 'border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950 text-slate-350'
-                        : isCompleted
-                        ? 'border-primary bg-primary text-white'
-                        : isActive
-                        ? 'border-primary bg-white dark:bg-slate-900 text-primary'
-                        : 'border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950 text-slate-300'
-                    }`}>
-                      {isCompleted ? (
-                        <Check className="w-2.5 h-2.5 stroke-[3]" />
-                      ) : (
-                        <div className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-primary animate-pulse' : 'bg-transparent'}`} />
-                      )}
-                    </div>
-
-                    <div className="space-y-0.5">
-                      <p className={`font-semibold text-xs ${
-                        isRejected && idx > 0
-                          ? 'text-slate-400 line-through'
-                          : isActive
-                          ? 'text-primary font-bold'
-                          : isCompleted
-                          ? 'text-slate-850 dark:text-slate-200'
-                          : 'text-slate-400 dark:text-slate-550'
-                      }`}>
-                        {step.label} {isRejected && idx === 1 && <span className="text-rose-500 font-bold font-sans">(REJECTED)</span>}
-                      </p>
-                      <p className="text-[10px] text-slate-450 dark:text-slate-500">{step.desc}</p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Action Row */}
-          <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
-            <a
-              href={getWhatsAppShareLink(confirmedOrder)}
-              rel="noopener noreferrer"
-              className="btn-primary py-3 px-8 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 bg-green-500 hover:bg-green-600"
-            >
-              <Share2 className="w-4 h-4" /> Send WhatsApp Confirmation
-            </a>
-            
-            <button
-              onClick={() => {
-                setConfirmedOrder(null);
-                setDeliveryAddress('');
-                setCoordinates(null);
-                setDeliveryValidation(null);
-              }}
-              className="btn-secondary py-3 px-8 text-xs font-bold rounded-xl"
-            >
-              Order More Juices
-            </button>
-          </div>
-        </div>
-      ) : (
-
-        // 3. MAIN CHECKOUT AND HISTORY GRID
+      {/* TAB 1: CHECKOUT & PLACE ORDER */}
+      {activePageTab === 'checkout' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           
           {/* LEFT/MID: CHECKOUT FORM */}
           <div className="lg:col-span-2 space-y-8">
             {cartItems.length === 0 ? (
-              // Empty cart block
-              <div className="p-12 rounded-3xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 text-center flex flex-col items-center gap-4">
+              <div className="p-12 rounded-3xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 text-center flex flex-col items-center gap-4 shadow-sm">
                 <div className="w-16 h-16 rounded-full bg-green-50 dark:bg-green-950/40 text-primary flex items-center justify-center">
                   <ShoppingBag className="w-7 h-7" />
                 </div>
                 <div>
                   <h3 className="font-semibold text-slate-800 dark:text-white">Your Cart is Empty</h3>
-                  <p className="text-xs text-slate-550 dark:text-slate-450 mt-1 max-w-[280px] leading-relaxed">
+                  <p className="text-xs text-slate-500 dark:text-slate-450 mt-1 max-w-[280px] leading-relaxed">
                     Add fresh juices or milkshakes to your cart from our menu catalog to start checking out!
                   </p>
                 </div>
@@ -1006,7 +925,6 @@ export default function Orders() {
                 </a>
               </div>
             ) : (
-              // Active form
               <div className="bg-white dark:bg-slate-900 p-6 sm:p-8 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm flex flex-col gap-6">
                 
                 {/* Name fields */}
@@ -1060,7 +978,7 @@ export default function Orders() {
                     onChange={(e) => setDeliveryAddress(e.target.value)}
                     placeholder="Enter full delivery address with landmark details..."
                     rows="2.5"
-                    className="w-full p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-slate-850 dark:text-slate-100 resize-none"
+                    className="w-full p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-slate-850 dark:text-slate-105 resize-none"
                   />
 
                   {/* Manual Coordinates Toggle */}
@@ -1076,7 +994,7 @@ export default function Orders() {
                     <button
                       type="button"
                       onClick={() => handleTestCoordinates(false)}
-                      className="bg-rose-50 dark:bg-rose-950/40 border border-rose-200/20 text-rose-600 px-2.5 py-1 rounded text-[10px] font-bold hover:bg-rose-100"
+                      className="bg-rose-50 dark:bg-rose-955/40 border border-rose-200/20 text-rose-600 px-2.5 py-1 rounded text-[10px] font-bold hover:bg-rose-105"
                     >
                       Outside 10KM (Demo)
                     </button>
@@ -1086,8 +1004,8 @@ export default function Orders() {
                   {deliveryValidation && (
                     <div className={`p-4.5 rounded-xl border text-xs flex gap-3 mt-2 ${
                       deliveryValidation.isEligible 
-                        ? 'bg-emerald-50/70 dark:bg-emerald-950/20 border-emerald-200/30 text-emerald-800 dark:text-emerald-350'
-                        : 'bg-rose-50/70 dark:bg-rose-950/20 border-rose-200/30 text-rose-800 dark:text-rose-350'
+                        ? 'bg-emerald-50/70 dark:bg-emerald-955/20 border-emerald-200/30 text-emerald-800 dark:text-emerald-350'
+                        : 'bg-rose-50/70 dark:bg-rose-955/20 border-rose-200/30 text-rose-805 dark:text-rose-350'
                     }`}>
                       <div className="mt-0.5 shrink-0">
                         {deliveryValidation.isEligible ? (
@@ -1100,7 +1018,7 @@ export default function Orders() {
                         <p className="font-semibold text-sm">
                           {deliveryValidation.isEligible ? 'Delivery Boundary Accepted! 🎉' : 'Delivery Boundary Exceeded'}
                         </p>
-                        <p className="mt-0.5 text-slate-650 dark:text-slate-400 leading-relaxed">
+                        <p className="mt-0.5 text-slate-600 dark:text-slate-400 leading-relaxed">
                           {deliveryValidation.isEligible
                             ? `Your location is ${deliveryValidation.distanceKm} KM from our permanent Udayagiri shop, which is within our 10 KM delivery radius.`
                             : `Your location is ${deliveryValidation.distanceKm} KM from our shop. Sorry, we cannot deliver beyond a 10 KM radius.`}
@@ -1112,20 +1030,20 @@ export default function Orders() {
 
                 {/* DYNAMIC PROGRESSION: PAYMENTS SECTION REVEALS ONLY IF DISTANCE IS BELOW 10KM */}
                 {deliveryValidation?.isEligible ? (
-                  <div className="space-y-6 pt-4 border-t border-slate-100 dark:border-slate-800 animate-fadeIn">
+                  <div className="space-y-6 pt-4 border-t border-slate-100 dark:border-slate-805 animate-fadeIn">
                     
                     {/* First Order Coupon Banner & Input */}
                     <div className="space-y-3 p-4 bg-orange-50/40 dark:bg-orange-950/15 border border-orange-200/20 rounded-2xl">
                       <div className="flex justify-between items-start">
                         <div>
-                          <p className="text-xs font-bold text-slate-800 dark:text-slate-200">First Order Discount Offer</p>
+                          <p className="text-xs font-bold text-slate-800 dark:text-slate-205">First Order Discount Offer</p>
                           <p className="text-[10px] text-slate-500 mt-0.5">Use code <span className="font-bold text-orange-600 dark:text-orange-400">FIRST20</span> to get 20% OFF on all items!</p>
                         </div>
                         {!appliedCoupon && (
                           <button
                             type="button"
                             onClick={() => handleApplyCoupon('FIRST20')}
-                            className="bg-orange-550 hover:bg-orange-655 text-white text-[10px] font-bold px-2.5 py-1 rounded transition-colors"
+                            className="bg-orange-500 hover:bg-orange-600 text-white text-[10px] font-bold px-2.5 py-1 rounded transition-colors"
                           >
                             Apply Instantly
                           </button>
@@ -1138,7 +1056,7 @@ export default function Orders() {
                           value={couponCode}
                           onChange={(e) => setCouponCode(e.target.value)}
                           placeholder="Enter coupon code (e.g. FIRST20)"
-                          className="flex-1 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-xs focus:outline-none focus:ring-1 focus:ring-primary text-slate-850 dark:text-slate-100"
+                          className="flex-1 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-805 bg-white dark:bg-slate-900 text-xs focus:outline-none focus:ring-1 focus:ring-primary text-slate-850 dark:text-slate-100"
                           disabled={!!appliedCoupon}
                         />
                         {appliedCoupon ? (
@@ -1161,7 +1079,7 @@ export default function Orders() {
                       </div>
                       
                       {couponError && <p className="text-[10px] font-bold text-rose-500">{couponError}</p>}
-                      {couponSuccess && <p className="text-[10px] font-bold text-emerald-600">{couponSuccess}</p>}
+                      {couponSuccess && <p className="text-[10px] font-bold text-emerald-605">{couponSuccess}</p>}
                     </div>
 
                     {/* Payment Select */}
@@ -1176,7 +1094,7 @@ export default function Orders() {
                           className={`p-4 rounded-xl border flex items-center justify-between text-left transition-all ${
                             paymentMethod === 'COD'
                               ? 'border-primary bg-green-50/30 dark:bg-green-950/10 text-slate-900 dark:text-white font-semibold'
-                              : 'border-slate-200 dark:border-slate-805 text-slate-500 dark:text-slate-450 hover:bg-slate-50 dark:hover:bg-slate-950'
+                              : 'border-slate-202 dark:border-slate-800 text-slate-500 dark:text-slate-450 hover:bg-slate-50 dark:hover:bg-slate-950'
                           }`}
                         >
                           <div>
@@ -1197,7 +1115,7 @@ export default function Orders() {
                           className={`p-4 rounded-xl border flex items-center justify-between text-left transition-all ${
                             paymentMethod === 'Razorpay'
                               ? 'border-primary bg-green-50/30 dark:bg-green-950/10 text-slate-900 dark:text-white font-semibold'
-                              : 'border-slate-200 dark:border-slate-805 text-slate-500 dark:text-slate-450 hover:bg-slate-50 dark:hover:bg-slate-950'
+                              : 'border-slate-202 dark:border-slate-800 text-slate-500 dark:text-slate-450 hover:bg-slate-50 dark:hover:bg-slate-950'
                           }`}
                         >
                           <div>
@@ -1231,8 +1149,7 @@ export default function Orders() {
 
                   </div>
                 ) : (
-                  // Alert if not validated yet
-                  <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-850 text-center text-xs text-slate-500 leading-relaxed pt-6 pb-6">
+                  <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-955 border border-slate-200 dark:border-slate-850 text-center text-xs text-slate-500 leading-relaxed pt-6 pb-6">
                     <Clock className="w-6 h-6 mx-auto mb-2 text-slate-400" />
                     Please check delivery radius availability above to choose a payment option and proceed.
                   </div>
@@ -1242,22 +1159,20 @@ export default function Orders() {
             )}
           </div>
 
-          {/* RIGHT SIDE: CART SUMMARY & TRACKING HISTORY */}
+          {/* RIGHT SIDE: CART SUMMARY */}
           <div className="space-y-8">
-            
-            {/* CART SUMMARY */}
             {cartItems.length > 0 && (
-              <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm space-y-4">
-                <h3 className="font-semibold text-slate-800 dark:text-white text-base">Order Summary</h3>
-                <div className="max-h-56 overflow-y-auto space-y-3 pr-1">
+              <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-100 dark:border-slate-805 shadow-sm space-y-4">
+                <h3 className="font-semibold text-slate-850 dark:text-white text-base">Order Summary</h3>
+                <div className="max-h-96 overflow-y-auto space-y-3 pr-1">
                   {cartItems.map((item) => (
                     <div key={item.id} className="flex justify-between items-center text-xs text-slate-600 dark:text-slate-400">
-                      <span className="truncate max-w-[150px]">{item.name} <span className="font-bold">x {item.quantity}</span></span>
+                      <span className="truncate max-w-[180px] font-medium">{item.name} <span className="font-bold text-slate-800 dark:text-slate-300">x {item.quantity}</span></span>
                       <span>₹{(parseFloat(item.price) * item.quantity).toFixed(2)}</span>
                     </div>
                   ))}
                 </div>
-                <div className="border-t border-slate-100 dark:border-slate-800 pt-3 space-y-2 text-xs">
+                <div className="border-t border-slate-100 dark:border-slate-805 pt-3 space-y-2 text-xs">
                   <div className="flex justify-between items-center text-slate-600 dark:text-slate-400">
                     <span>Subtotal</span>
                     <span>₹{cartTotal.toFixed(2)}</span>
@@ -1268,198 +1183,383 @@ export default function Orders() {
                       <span>-₹{discountAmount.toFixed(2)}</span>
                     </div>
                   )}
-                  <div className="flex justify-between items-center font-bold text-sm text-slate-850 dark:text-white pt-1 border-t border-dashed border-slate-105 dark:border-slate-800">
+                  <div className="flex justify-between items-center font-bold text-sm text-slate-850 dark:text-white pt-1 border-t border-dashed border-slate-200 dark:border-slate-800">
                     <span>Grand Total</span>
                     <span>₹{finalTotal.toFixed(2)}</span>
                   </div>
                 </div>
               </div>
             )}
-
-            {/* MY ORDERS HISTORY */}
-            <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm space-y-6">
-              <div className="flex justify-between items-center pb-2 border-b border-slate-50 dark:border-slate-800">
-                <h3 className="font-semibold text-slate-800 dark:text-white text-base">My Orders</h3>
-                <span className="text-[10px] text-slate-400 font-bold bg-slate-50 dark:bg-slate-950 px-2 py-0.5 rounded-full uppercase">Realtime Live</span>
-              </div>
-
-              {loadingOrders ? (
-                <div className="flex justify-center items-center py-6">
-                  <Loader className="w-6 h-6 text-primary animate-spin" />
-                </div>
-              ) : myOrders.length === 0 ? (
-                <p className="text-xs text-slate-500 text-center py-6">
-                  No orders placed yet. Complete checkout above!
-                </p>
-              ) : (
-                <div className="space-y-8 max-h-[600px] overflow-y-auto pr-1">
-                  {myOrders.map((order) => {
-                    const currentStep = getOrderStatusStep(order.order_status);
-                    
-                    // Show ETA countdown if status is between pending and otp_pending
-                    const showETA = ['pending', 'accepted'].includes(order.order_status);
-
-                    // Steps array for the timeline
-                    const steps = [
-                      { key: 'pending', label: 'Order Placed', desc: 'Received by Bismilla shop' },
-                      { key: 'accepted', label: 'Accepted by Shop', desc: 'Confirmed by Imran' },
-                      { key: 'otp_pending', label: 'OTP Verification', desc: 'Tell OTP to partner' },
-                      { key: 'delivered', label: 'Delivered', desc: 'Enjoy your fresh juice!' }
-                    ];
-
-                    return (
-                      <div 
-                        key={order.id} 
-                        className={`border p-5 rounded-2xl space-y-4 shadow-sm ${
-                          order.order_status === 'rejected'
-                            ? 'border-rose-300/60 dark:border-rose-800/50 bg-rose-50/20 dark:bg-rose-950/10'
-                            : 'border-slate-100 dark:border-slate-800 bg-slate-55 dark:bg-slate-950/20'
-                        }`}
-                      >
-                        {/* Order Header */}
-                        <div className={`flex justify-between items-start text-xs pb-3 border-b ${
-                          order.order_status === 'rejected'
-                            ? 'border-rose-200 dark:border-rose-900/40'
-                            : 'border-slate-100 dark:border-slate-850'
-                        }`}>
-                          <div>
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <p className="font-mono font-bold text-slate-850 dark:text-slate-200 text-sm">#{order.id.substring(0, 8)}</p>
-                              {order.order_status === 'rejected' && (
-                                <span className="inline-flex items-center gap-1 text-[9px] font-bold text-rose-600 bg-rose-50 dark:bg-rose-950/40 px-2 py-0.5 rounded-full uppercase border border-rose-200/30">
-                                  <XCircle className="w-2.5 h-2.5" /> Rejected
-                                </span>
-                              )}
-                            </div>
-                            <p className="text-[9px] text-slate-450 mt-1 uppercase font-semibold">{new Date(order.created_at).toLocaleTimeString()} • {new Date(order.created_at).toLocaleDateString()}</p>
-                          </div>
-                          <div className="flex flex-col items-end gap-1.5">
-                            <span className="font-bold text-slate-800 dark:text-slate-100 text-sm">₹{parseFloat(order.total_amount).toFixed(2)}</span>
-                            {getPaymentStatusBadge(order)}
-                            {(order.payment_method === 'Razorpay' && 
-                              ['FAILED', 'CANCELLED', 'failed'].includes(order.payment_status)) && (
-                              <button
-                                type="button"
-                                onClick={() => handleRetryPayment(order)}
-                                className="bg-primary hover:bg-green-600 text-white text-[9px] font-extrabold px-2.5 py-0.5 rounded-full transition-all shadow-sm flex items-center gap-1 mt-1 animate-pulse"
-                              >
-                                <CreditCard className="w-2.5 h-2.5" /> Retry Pay
-                              </button>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Items summary */}
-                        <div className="text-[11px] text-slate-600 dark:text-slate-450 space-y-1">
-                          <p className="font-bold text-slate-500 uppercase text-[9px] tracking-wider">Ordered Juices</p>
-                          {order.order_items?.map((item) => (
-                            <div key={item.id} className="flex justify-between">
-                              <span>• {item.products?.name || 'Fresh Juice'} <span className="font-bold text-slate-700 dark:text-slate-350">x {item.quantity}</span></span>
-                              <span>₹{(parseFloat(item.price_at_order) * item.quantity).toFixed(2)}</span>
-                            </div>
-                          ))}
-                        </div>
-
-                        {/* Estimated Arrival Banner */}
-                        {showETA && (
-                          <div className="bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200/20 p-3 rounded-xl flex items-center gap-2.5 text-xs text-blue-700 dark:text-blue-400">
-                            <Clock className="w-4 h-4 shrink-0 animate-spin-slow text-primary" />
-                            <div>
-                              <p className="font-semibold">Estimated Arrival: 30 minutes</p>
-                              {order.order_status !== 'pending' && (
-                                <p className="text-[10px] text-slate-550 dark:text-slate-400 mt-0.5">Your fresh order has been approved & is actively processing.</p>
-                              )}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* 6-Stage Timeline */}
-                        <div className="pt-2 pb-2">
-                          <p className="font-bold text-slate-500 uppercase text-[9px] tracking-wider mb-3">Delivery Progress</p>
-                          <div className="space-y-3 pl-1.5">
-                            {steps.map((step, idx) => {
-                              const isCompleted = idx < currentStep;
-                              const isActive = idx === currentStep;
-                              const isRejected = order.order_status === 'rejected';
-
-                              return (
-                                <div key={step.key} className="flex gap-3 text-xs relative">
-                                  {/* Connector Line */}
-                                  {idx < steps.length - 1 && (
-                                    <div className={`w-0.5 absolute left-[7px] top-[18px] bottom-[-16px] -z-10 ${
-                                      idx < currentStep ? 'bg-primary' : 'bg-slate-200 dark:bg-slate-800'
-                                    }`} />
-                                  )}
-
-                                  {/* Step Circle */}
-                                  <div className={`w-4.5 h-4.5 rounded-full flex items-center justify-center border-2 shrink-0 z-10 transition-colors ${
-                                    isRejected && idx > 0
-                                      ? 'border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950 text-slate-350'
-                                      : isCompleted
-                                      ? 'border-primary bg-primary text-white'
-                                      : isActive
-                                      ? 'border-primary bg-white dark:bg-slate-900 text-primary animate-pulse'
-                                      : 'border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950 text-slate-300'
-                                  }`}>
-                                    {isCompleted ? (
-                                      <Check className="w-2.5 h-2.5 stroke-[3]" />
-                                    ) : (
-                                      <div className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-primary' : 'bg-transparent'}`} />
-                                    )}
-                                  </div>
-
-                                  {/* Step details */}
-                                  <div className="space-y-0.5">
-                                    <p className={`font-semibold ${
-                                      isRejected && idx > 0
-                                        ? 'text-slate-400 line-through'
-                                        : isActive
-                                        ? 'text-primary font-bold'
-                                        : isCompleted
-                                        ? 'text-slate-800 dark:text-slate-200'
-                                        : 'text-slate-400 dark:text-slate-550'
-                                    }`}>
-                                      {step.label} {isRejected && idx === 1 && <span className="text-rose-500 font-bold font-sans">(REJECTED)</span>}
-                                    </p>
-                                    <p className="text-[10px] text-slate-400 dark:text-slate-500">{step.desc}</p>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-
-                        {/* OTP Verification Alert */}
-                        {order.order_status === 'otp_pending' && (
-                          <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-250/25 p-4 rounded-xl flex flex-col gap-2.5 text-xs">
-                            <div className="flex items-center gap-2 font-bold text-amber-800 dark:text-amber-300">
-                              <Smartphone className="w-4 h-4 shrink-0 text-amber-500" />
-                              <span>Delivery OTP Sent!</span>
-                            </div>
-                            <p className="text-slate-650 dark:text-slate-400 leading-relaxed text-[11px]">
-                              A 4-digit code was sent to your mobile <strong>{order.customer_mobile}</strong>.
-                              When our delivery partner arrives, <strong>tell them the OTP from your SMS</strong>.
-                            </p>
-                          </div>
-                        )}
-
-                        {/* WhatsApp support confirmation */}
-                        <a
-                          href={getWhatsAppShareLink(order)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="w-full bg-green-55 hover:bg-green-100 text-green-700 dark:text-green-400 dark:bg-green-950/20 py-2.5 rounded-xl text-center text-[10px] font-bold flex items-center justify-center gap-1.5 border border-green-200/20 transition-colors"
-                        >
-                          <Share2 className="w-3.5 h-3.5" /> WhatsApp Confirmation
-                        </a>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
           </div>
+
+        </div>
+      )}
+
+      {/* TAB 2: ACTIVE TRACKING */}
+      {activePageTab === 'tracking' && (
+        <div className="space-y-6 max-w-4xl mx-auto w-full">
+          
+          {/* Confirmed Banner */}
+          {confirmedOrder && (
+            <div className="bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200/30 p-5 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 animate-fadeIn">
+              <div>
+                <h3 className="font-bold text-emerald-805 dark:text-emerald-300 text-sm flex items-center gap-1.5">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                  Order Placed Successfully! 🎉
+                </h3>
+                <p className="text-[11px] text-slate-600 dark:text-slate-405 mt-1 leading-relaxed">
+                  Thank you for ordering with us. Your order <span className="font-mono font-bold">#{confirmedOrder.id.substring(0, 8)}</span> is active and is being prepared with 100% pure fresh fruits.
+                </p>
+              </div>
+              <button
+                onClick={() => setConfirmedOrder(null)}
+                className="text-xs font-bold text-emerald-700 dark:text-emerald-400 hover:underline shrink-0"
+              >
+                Dismiss Banner
+              </button>
+            </div>
+          )}
+
+          {loadingOrders ? (
+            <div className="flex justify-center items-center py-12">
+              <Loader className="w-8 h-8 text-primary animate-spin" />
+            </div>
+          ) : activeOrders.length === 0 ? (
+            <div className="p-12 rounded-3xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 text-center flex flex-col items-center gap-4 shadow-sm">
+              <div className="w-16 h-16 rounded-full bg-blue-50 dark:bg-blue-955/40 text-blue-500 flex items-center justify-center">
+                <Clock className="w-7 h-7" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-slate-850 dark:text-white">No Active Orders</h3>
+                <p className="text-xs text-slate-505 mt-1 max-w-xs leading-relaxed">
+                  You don't have any active orders right now. Place an order in the checkout tab or browse our menu!
+                </p>
+              </div>
+              <a href="/products" className="btn-secondary text-xs px-6 py-2.5 border-dashed">
+                Go to Menu
+              </a>
+            </div>
+          ) : (
+            <div className="space-y-8">
+              {activeOrders.map((order) => {
+                const currentStep = getOrderStatusStep(order.order_status);
+                const showETA = ['pending', 'accepted'].includes(order.order_status);
+                const isNewlyPlaced = confirmedOrder && confirmedOrder.id === order.id;
+
+                const steps = [
+                  { key: 'pending', label: 'Order Placed', desc: 'Received by Bismilla shop' },
+                  { key: 'accepted', label: 'Accepted by Shop', desc: 'Confirmed by Imran' },
+                  { key: 'otp_pending', label: 'OTP Verification', desc: 'Tell OTP to partner' },
+                  { key: 'delivered', label: 'Delivered', desc: 'Enjoy your fresh juice!' }
+                ];
+
+                return (
+                  <div 
+                    key={order.id} 
+                    className={`border p-6 rounded-3xl bg-white dark:bg-slate-900 space-y-6 shadow-sm transition-all duration-305 ${
+                      isNewlyPlaced 
+                        ? 'border-emerald-500 ring-2 ring-emerald-100 dark:ring-emerald-950/40' 
+                        : 'border-slate-100 dark:border-slate-800'
+                    }`}
+                  >
+                    {/* Order header row */}
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-105 dark:border-slate-850 pb-4">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <p className="font-mono font-bold text-slate-850 dark:text-slate-205 text-base">#{order.id.substring(0, 8)}</p>
+                          {isNewlyPlaced && (
+                            <span className="bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-305 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider animate-pulse">
+                              Just Placed
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[10px] text-slate-500 mt-1 uppercase font-semibold">
+                          Placed: {new Date(order.created_at).toLocaleDateString()} at {new Date(order.created_at).toLocaleTimeString()}
+                        </p>
+                      </div>
+                      
+                      <div className="flex flex-col sm:items-end gap-1">
+                        <span className="font-extrabold text-slate-855 dark:text-white text-base">₹{parseFloat(order.total_amount).toFixed(2)}</span>
+                        <div className="flex items-center gap-2">
+                          {getPaymentStatusBadge(order)}
+                          {order.payment_method === 'Razorpay' && 
+                            ['FAILED', 'CANCELLED', 'failed'].includes(order.payment_status) && (
+                            <button
+                              onClick={() => handleRetryPayment(order)}
+                              className="bg-primary hover:bg-green-600 text-white text-[9px] font-extrabold px-3 py-1 rounded-full transition-all shadow-sm flex items-center gap-1 animate-pulse"
+                            >
+                              <CreditCard className="w-2.5 h-2.5" /> Retry Pay
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Order details panel */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs bg-slate-50/50 dark:bg-slate-955/10 p-4 rounded-2xl border border-slate-105/50 dark:border-slate-800/40">
+                      <div className="space-y-1">
+                        <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Delivery Address</span>
+                        <span className="font-semibold text-slate-700 dark:text-slate-200 leading-relaxed">{order.delivery_address}</span>
+                      </div>
+                      <div className="space-y-1">
+                        <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Customer Details</span>
+                        <span className="font-semibold text-slate-700 dark:text-slate-200">{order.customer_name} ({order.customer_mobile})</span>
+                      </div>
+                    </div>
+
+                    {/* Ordered items */}
+                    <div className="space-y-2 text-xs">
+                      <p className="font-bold text-slate-455 uppercase text-[9px] tracking-wider">Juices Ordered</p>
+                      <div className="border border-slate-100 dark:border-slate-800 rounded-2xl p-4 divide-y divide-slate-100 dark:divide-slate-800 bg-white dark:bg-slate-900">
+                        {order.order_items?.map((item) => (
+                          <div key={item.id} className="flex justify-between py-2 first:pt-0 last:pb-0 font-medium">
+                            <span className="text-slate-705 dark:text-slate-300">
+                              {item.products?.name || 'Fresh Juice'}{' '}
+                              <span className="font-bold text-slate-900 dark:text-white bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-[10px] ml-1">
+                                x{item.quantity}
+                              </span>
+                            </span>
+                            <span className="font-semibold text-slate-850 dark:text-slate-202">₹{(parseFloat(item.price_at_order) * item.quantity).toFixed(2)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* ETA Countdown Alert */}
+                    {showETA && (
+                      <div className="bg-blue-50/40 dark:bg-blue-955/20 border border-blue-200/20 p-4 rounded-2xl flex items-center gap-3 text-xs text-blue-750 dark:text-blue-350">
+                        <Clock className="w-5 h-5 shrink-0 animate-spin-slow text-primary" />
+                        <div>
+                          <p className="font-bold text-sm">Estimated Delivery: ~30 minutes</p>
+                          <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+                            {order.order_status === 'pending'
+                              ? 'Waiting for Imran to accept and confirm the order.'
+                              : 'Your fresh juices are being prepared! Out for delivery soon.'}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Timeline Tracker */}
+                    <div className="border border-slate-105 dark:border-slate-800 bg-slate-50/30 dark:bg-slate-950/10 p-5 rounded-2xl">
+                      <div className="flex justify-between items-center pb-3 border-b border-slate-105 dark:border-slate-850">
+                        <h4 className="font-semibold text-slate-800 dark:text-white text-xs uppercase tracking-wider">Live Delivery Tracker</h4>
+                        <span className="inline-flex items-center gap-1 text-[9px] font-bold text-primary bg-green-50 dark:bg-green-950/40 px-2 py-0.5 rounded-full">
+                          <span className="w-1.5 h-1.5 rounded-full bg-primary animate-ping" /> Realtime Sync
+                        </span>
+                      </div>
+
+                      <div className="space-y-4 pl-1 pt-3.5">
+                        {steps.map((step, idx) => {
+                          const isCompleted = idx < currentStep;
+                          const isActive = idx === currentStep;
+                          const isRejected = order.order_status === 'rejected';
+
+                          return (
+                            <div key={step.key} className="flex gap-3.5 text-xs relative">
+                              {idx < steps.length - 1 && (
+                                <div className={`w-0.5 absolute left-[8px] top-[18px] bottom-[-22px] -z-10 ${
+                                  idx < currentStep ? 'bg-primary' : 'bg-slate-200 dark:bg-slate-800'
+                                }`} />
+                              )}
+
+                              <div className={`w-4.5 h-4.5 rounded-full flex items-center justify-center border-2 shrink-0 z-10 transition-colors ${
+                                isRejected && idx > 0
+                                  ? 'border-slate-200 bg-white dark:border-slate-805 dark:bg-slate-955 text-slate-350'
+                                  : isCompleted
+                                  ? 'border-primary bg-primary text-white'
+                                  : isActive
+                                  ? 'border-primary bg-white dark:bg-slate-900 text-primary'
+                                  : 'border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-955 text-slate-300'
+                              }`}>
+                                {isCompleted ? (
+                                  <Check className="w-2.5 h-2.5 stroke-[3]" />
+                                ) : (
+                                  <div className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-primary animate-pulse' : 'bg-transparent'}`} />
+                                )}
+                              </div>
+
+                              <div className="space-y-0.5">
+                                <p className={`font-semibold text-xs ${
+                                  isRejected && idx > 0
+                                    ? 'text-slate-400 line-through'
+                                    : isActive
+                                    ? 'text-primary font-bold'
+                                    : isCompleted
+                                    ? 'text-slate-850 dark:text-slate-202'
+                                    : 'text-slate-400 dark:text-slate-550'
+                                }`}>
+                                  {step.label} {isRejected && idx === 1 && <span className="text-rose-500 font-bold font-sans">(REJECTED)</span>}
+                                </p>
+                                <p className="text-[10px] text-slate-455 dark:text-slate-500">{step.desc}</p>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* OTP verification box */}
+                    {order.order_status === 'otp_pending' && (
+                      <div className="bg-amber-50 dark:bg-amber-955/20 border border-amber-250/25 p-4.5 rounded-2xl flex flex-col gap-2.5 text-xs">
+                        <div className="flex items-center gap-2 font-bold text-amber-800 dark:text-amber-300">
+                          <Lock className="w-4.5 h-4.5 shrink-0 text-amber-500" />
+                          <span className="text-sm">Verify Delivery via OTP</span>
+                        </div>
+                        <p className="text-slate-600 dark:text-slate-400 leading-relaxed text-xs">
+                          Provide the 4-digit code below to the delivery partner to verify checkout & close transaction.
+                        </p>
+                        <div className="bg-amber-100/60 dark:bg-amber-950/40 border border-amber-200/50 rounded-xl p-3 flex items-start gap-2.5">
+                          <span className="text-amber-600 font-extrabold text-base mt-0.5">📲</span>
+                          <p className="text-amber-800 dark:text-amber-300 font-semibold text-[11px] leading-relaxed text-left">
+                            When our delivery partner arrives, <strong>tell them the OTP from your SMS</strong>.
+                            They will enter it to confirm delivery and complete the transaction.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Actions row */}
+                    <div className="flex flex-wrap gap-2.5 pt-2">
+                      <a
+                        href={getWhatsAppShareLink(order)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="bg-green-500 hover:bg-green-600 text-white text-xs font-bold py-3 px-6 rounded-xl flex items-center justify-center gap-1.5 transition-colors"
+                      >
+                        <Share2 className="w-4 h-4" /> Share on WhatsApp
+                      </a>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB 3: ORDER HISTORY */}
+      {activePageTab === 'history' && (
+        <div className="space-y-6 max-w-4xl mx-auto w-full">
+          
+          {/* TOTAL EXPENSE STATS BANNER */}
+          {pastOrders.length > 0 && (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-slate-50 dark:bg-slate-900 border border-slate-105 dark:border-slate-805 p-6 rounded-3xl shadow-sm">
+              <div className="space-y-1">
+                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Total Amount Spent</span>
+                <p className="text-2xl font-extrabold text-primary">₹{totalSpent.toFixed(2)}</p>
+              </div>
+              <div className="space-y-1">
+                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Orders Delivered</span>
+                <p className="text-2xl font-extrabold text-slate-800 dark:text-white">{totalDeliveries}</p>
+              </div>
+              <div className="space-y-1">
+                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Total Orders Placed</span>
+                <p className="text-2xl font-extrabold text-slate-800 dark:text-white">{pastOrders.length}</p>
+              </div>
+            </div>
+          )}
+
+          {loadingOrders ? (
+            <div className="flex justify-center items-center py-12">
+              <Loader className="w-8 h-8 text-primary animate-spin" />
+            </div>
+          ) : pastOrders.length === 0 ? (
+            <div className="p-12 rounded-3xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 text-center flex flex-col items-center gap-4 shadow-sm">
+              <div className="w-16 h-16 rounded-full bg-slate-50 dark:bg-slate-950/40 text-slate-450 flex items-center justify-center">
+                <ClipboardList className="w-7 h-7" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-slate-850 dark:text-white">No Order History</h3>
+                <p className="text-xs text-slate-505 mt-1 max-w-xs leading-relaxed">
+                  You don't have any completed orders yet. Place and receive your first order to build history!
+                </p>
+              </div>
+              <a href="/products" className="btn-primary text-xs px-6 py-2.5">
+                Order Pure Juices
+              </a>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {pastOrders.map((order) => {
+                const isDelivered = order.order_status === 'delivered';
+                const isRejected = order.order_status === 'rejected';
+
+                return (
+                  <div 
+                    key={order.id} 
+                    className="border border-slate-105 dark:border-slate-800 p-6 rounded-3xl bg-white dark:bg-slate-900 space-y-4 shadow-sm"
+                  >
+                    {/* Header line */}
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
+                      <div>
+                        <p className="font-mono font-bold text-slate-805 dark:text-slate-200 text-sm">#{order.id.substring(0, 8)}</p>
+                        <p className="text-[10px] text-slate-450 mt-1 font-semibold uppercase">
+                          {new Date(order.created_at).toLocaleDateString()} • {new Date(order.created_at).toLocaleTimeString()}
+                        </p>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        {/* Status badge */}
+                        <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-extrabold uppercase tracking-wide ${
+                          isDelivered 
+                            ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-955/60 dark:text-emerald-400' 
+                            : isRejected
+                            ? 'bg-rose-50 text-rose-700 dark:bg-rose-955/60 dark:text-rose-455'
+                            : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+                        }`}>
+                          {order.order_status}
+                        </span>
+
+                        <span className="font-extrabold text-slate-800 dark:text-white text-sm">₹{parseFloat(order.total_amount).toFixed(2)}</span>
+                      </div>
+                    </div>
+
+                    {/* Receipt Items summary */}
+                    <div className="space-y-1.5 text-xs">
+                      {order.order_items?.map((item) => (
+                        <div key={item.id} className="flex justify-between text-slate-655 dark:text-slate-400 font-medium">
+                          <span>
+                            • {item.products?.name || 'Fresh Juice'}{' '}
+                            <span className="font-bold text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-[10px] ml-1">
+                              x{item.quantity}
+                            </span>
+                          </span>
+                          <span>₹{(parseFloat(item.price_at_order) * item.quantity).toFixed(2)}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Address details */}
+                    <div className="text-[10px] text-slate-400 leading-relaxed bg-slate-50 dark:bg-slate-955/20 p-3 rounded-xl">
+                      <strong className="text-slate-500 uppercase block text-[8px] tracking-wider mb-1">Delivered to</strong>
+                      <p className="text-slate-700 dark:text-slate-300 font-medium">{order.delivery_address}</p>
+                    </div>
+
+                    {/* Actions row */}
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      <button
+                        onClick={() => handleReorder(order)}
+                        className="bg-primary hover:bg-green-600 text-white text-xs font-bold py-2.5 px-5 rounded-xl transition-colors flex items-center gap-1.5"
+                      >
+                        <ShoppingBag className="w-3.5 h-3.5" /> Re-order Items
+                      </button>
+                      
+                      <a
+                        href={getWhatsAppShareLink(order)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold py-2.5 px-5 rounded-xl transition-colors flex items-center gap-1.5"
+                      >
+                        <Share2 className="w-3.5 h-3.5" /> Share Receipt
+                      </a>
+                    </div>
+
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
         </div>
       )}
@@ -1489,7 +1589,7 @@ export default function Orders() {
                       value={authName}
                       onChange={(e) => setAuthName(e.target.value)}
                       placeholder="Full Name"
-                      className="w-full pl-11 pr-4 py-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-xs focus:outline-none"
+                      className="w-full pl-11 pr-4 py-3 rounded-xl border border-slate-200 dark:border-slate-805 bg-slate-50 dark:bg-slate-950 text-xs focus:outline-none"
                       required
                     />
                   </div>
@@ -1500,7 +1600,7 @@ export default function Orders() {
                       value={authPhone}
                       onChange={(e) => setAuthPhone(e.target.value)}
                       placeholder="Mobile Number"
-                      className="w-full pl-11 pr-4 py-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-xs focus:outline-none"
+                      className="w-full pl-11 pr-4 py-3 rounded-xl border border-slate-200 dark:border-slate-805 bg-slate-50 dark:bg-slate-950 text-xs focus:outline-none"
                       required
                     />
                   </div>
@@ -1535,7 +1635,7 @@ export default function Orders() {
                 <p className={`text-xs px-3 py-2 rounded-lg font-medium ${
                   formError.startsWith('✅') 
                     ? 'text-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 dark:text-emerald-300' 
-                    : 'text-rose-500 bg-rose-50 dark:bg-rose-950/30'
+                    : 'text-rose-500 bg-rose-50 dark:bg-rose-955/30'
                 }`}>{formError}</p>
               )}
 
