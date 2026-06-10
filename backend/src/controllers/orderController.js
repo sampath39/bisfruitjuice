@@ -309,6 +309,14 @@ export const createOrder = async (req, res) => {
           }
         }
       }
+
+      // Validate that the resolved ID is a valid UUID and exists in our database
+      const existsInDb = !dbProductsError && dbProducts && dbProducts.some(p => p.id === resolvedProductId);
+      if (!resolvedProductId || !isValidUUID(resolvedProductId) || !existsInDb) {
+        console.warn(`[Order Controller] product_id "${resolvedProductId}" is invalid or does not exist in the database. Setting to null to avoid database error.`);
+        resolvedProductId = null;
+      }
+
       resolvedItems.push({
         ...item,
         product_id: resolvedProductId
@@ -361,7 +369,9 @@ export const createOrder = async (req, res) => {
     });
   } catch (err) {
     console.error('Error creating order:', err);
-    res.status(500).json({ error: 'Failed to create order' });
+    res.status(500).json({ 
+      error: `Failed to create order: ${err.message || err.details || JSON.stringify(err)}` 
+    });
   }
 };
 // Get orders for current user or guest (based on ids query param)
