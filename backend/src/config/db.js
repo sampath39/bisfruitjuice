@@ -4,8 +4,17 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const supabaseUrl = process.env.SUPABASE_URL || 'https://placeholder.supabase.co';
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'placeholder';
+const sanitizeUrl = (url) => {
+  if (!url) return '';
+  let cleaned = url.trim();
+  if (cleaned && !cleaned.startsWith('http://') && !cleaned.startsWith('https://')) {
+    cleaned = 'https://' + cleaned;
+  }
+  return cleaned;
+};
+
+const supabaseUrl = sanitizeUrl(process.env.SUPABASE_URL || 'https://placeholder.supabase.co');
+const supabaseServiceKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || 'placeholder').trim();
 
 const hasPlaceholder = 
   supabaseUrl.includes('placeholder') || 
