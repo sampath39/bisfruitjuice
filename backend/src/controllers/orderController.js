@@ -181,22 +181,42 @@ export const createOrder = async (req, res) => {
     }
 
     // Validate location & distance
+    const parsedLat = parseFloat(latitude);
+    const parsedLng = parseFloat(longitude);
+
+    if (isNaN(parsedLat) || isNaN(parsedLng)) {
+      return res.status(400).json({ error: 'Delivery location coordinates are required and must be valid numbers' });
+    }
+
     let distanceKm = 0;
-    if (latitude && longitude) {
-      distanceKm = await getDeliveryDistance(parseFloat(latitude), parseFloat(longitude));
+    try {
+      distanceKm = await getDeliveryDistance(parsedLat, parsedLng);
+      if (isNaN(distanceKm)) {
+        return res.status(400).json({ error: 'Could not calculate delivery distance for coordinates' });
+      }
       if (distanceKm > MAX_RADIUS_KM) {
         return res.status(400).json({ 
           error: `Delivery not available beyond ${MAX_RADIUS_KM}KM. Your distance: ${distanceKm.toFixed(2)} KM` 
         });
       }
-    } else {
-      return res.status(400).json({ error: 'Delivery location coordinates are required' });
+    } catch (err) {
+      console.error('Error calculating distance:', err);
+      return res.status(400).json({ error: 'Failed to verify delivery eligibility distance' });
     }
 
-    // Calculate total amount
+    // Calculate total amount safely
     let calculatedTotal = 0;
     for (const item of items) {
-      calculatedTotal += parseFloat(item.price) * parseInt(item.quantity);
+      const itemPrice = parseFloat(item.price);
+      const itemQty = parseInt(item.quantity);
+      if (isNaN(itemPrice) || isNaN(itemQty) || itemQty <= 0) {
+        return res.status(400).json({ error: 'Invalid item price or quantity in order items list' });
+      }
+      calculatedTotal += itemPrice * itemQty;
+    }
+
+    if (isNaN(calculatedTotal) || calculatedTotal <= 0) {
+      return res.status(400).json({ error: 'Invalid order total amount calculated' });
     }
 
     const { coupon_code } = req.body;
@@ -208,8 +228,8 @@ export const createOrder = async (req, res) => {
       customer_name,
       customer_mobile,
       delivery_address,
-      latitude: parseFloat(latitude),
-      longitude: parseFloat(longitude),
+      latitude: parsedLat,
+      longitude: parsedLng,
       distance_km: parseFloat(distanceKm.toFixed(2)),
       total_amount: calculatedTotal,
       payment_method,
