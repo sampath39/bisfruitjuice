@@ -7,7 +7,7 @@ import api from '../utils/api.js';
 
 // Hardcoded fallback data in case database API is not online
 const FALLBACK_PRODUCTS = [
-  // Juices — precise accurate images
+  // Juices (10 items)
   { id: 'j1', name: 'Mango Juice', description: 'Rich and creamy premium Alphonso mango juice. 100% natural, freshly squeezed, served chilled.', price: 99.00, category: 'Juices', image_url: 'https://images.unsplash.com/photo-1546173159-315724a31696?auto=format&fit=crop&q=80&w=600', is_available: true },
   { id: 'j2', name: 'Apple Juice', description: 'Freshly pressed crisp red apples. Pure fruit goodness, no sugar added.', price: 120.00, category: 'Juices', image_url: 'https://images.unsplash.com/photo-1576673442511-7e39b6545c87?auto=format&fit=crop&q=80&w=600', is_available: true },
   { id: 'j3', name: 'Orange Juice', description: 'Zesty and pulpy sweet oranges packed with natural Vitamin C. Freshly squeezed, refreshing taste.', price: 89.00, category: 'Juices', image_url: 'https://images.unsplash.com/photo-1621506289937-a8e4df240d0b?auto=format&fit=crop&q=80&w=600', is_available: true },
@@ -18,21 +18,54 @@ const FALLBACK_PRODUCTS = [
   { id: 'j8', name: 'Mixed Fruit Juice', description: 'A rich cocktail of seasonal fruits — orange, apple, pineapple, and pomegranate.', price: 110.00, category: 'Juices', image_url: 'https://images.unsplash.com/photo-1528823872057-9c018a7a7553?auto=format&fit=crop&q=80&w=600', is_available: true },
   { id: 'j9', name: 'Avocado Shake', description: 'Buttery, rich, premium avocado shake sweetened with honey and blended with nuts.', price: 160.00, category: 'Juices', image_url: 'https://images.unsplash.com/photo-1604085792782-8d92f276d7d8?auto=format&fit=crop&q=80&w=600', is_available: true },
   { id: 'j10', name: 'Mosambi Juice', description: 'Freshly extracted sweet lime juice. Lightly salted, sweet, citrusy, and deeply hydrating.', price: 79.00, category: 'Juices', image_url: 'https://images.unsplash.com/photo-1631452180519-c014fe946bc7?auto=format&fit=crop&q=80&w=600', is_available: true },
-  // Cool Drinks
+  
+  // Cool Drinks (10 items)
   { id: 'd1', name: 'Thums Up 250ml', description: 'Strong, carbonated fizzy cola drink. Served ice cold.', price: 20.00, category: 'Cool Drinks', image_url: 'https://images.unsplash.com/photo-1622483767028-3f66f32aef97?auto=format&fit=crop&q=80&w=600', is_available: true },
   { id: 'd2', name: 'Sprite 750ml', description: 'Crisp, refreshing lemon-lime soda. Chill bottle.', price: 45.00, category: 'Cool Drinks', image_url: 'https://images.unsplash.com/photo-1625772299848-391b6a87d7b3?auto=format&fit=crop&q=80&w=600', is_available: true },
   { id: 'd3', name: 'Coca Cola 1.25L', description: 'Classic fizzy sweet cola drink. Perfect party size.', price: 70.00, category: 'Cool Drinks', image_url: 'https://images.unsplash.com/photo-1561758033-d89a9ad46330?auto=format&fit=crop&q=80&w=600', is_available: true },
-  // Water Bottles
+  { id: 'd4', name: 'Fanta Orange 750ml', description: 'Bright, bubbly and popular orange flavored soft drink.', price: 45.00, category: 'Cool Drinks', image_url: 'https://images.unsplash.com/photo-1624517452488-04869289c4ca?auto=format&fit=crop&q=80&w=600', is_available: true },
+  { id: 'd5', name: 'Limca 250ml', description: 'Cloudy lemon flavor soft drink. Very refreshing.', price: 20.00, category: 'Cool Drinks', image_url: 'https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?auto=format&fit=crop&q=80&w=600', is_available: true },
+  { id: 'd6', name: 'Maaza 1.2L', description: 'Thick and sweet mango fruit drink. Loved by kids and adults.', price: 75.00, category: 'Cool Drinks', image_url: 'https://images.unsplash.com/photo-1622483767028-3f66f32aef97?auto=format&fit=crop&q=80&w=600', is_available: true },
+  { id: 'd7', name: 'Mountain Dew 250ml', description: 'Citrus-flavored caffeinated soft drink.', price: 20.00, category: 'Cool Drinks', image_url: 'https://images.unsplash.com/photo-1625772299848-391b6a87d7b3?auto=format&fit=crop&q=80&w=600', is_available: true },
+  { id: 'd8', name: 'Pepsi 750ml', description: 'Classic sweet carbonated cola beverage.', price: 45.00, category: 'Cool Drinks', image_url: 'https://images.unsplash.com/photo-1561758033-d89a9ad46330?auto=format&fit=crop&q=80&w=600', is_available: true },
+  { id: 'd9', name: 'Mirinda 250ml', description: 'Vibrant and sweet orange flavored carbonated drink.', price: 20.00, category: 'Cool Drinks', image_url: 'https://images.unsplash.com/photo-1624517452488-04869289c4ca?auto=format&fit=crop&q=80&w=600', is_available: true },
+  { id: 'd10', name: '7Up 1.25L', description: 'Clear, lemon-lime flavored, non-caffeinated soft drink.', price: 70.00, category: 'Cool Drinks', image_url: 'https://images.unsplash.com/photo-1625772299848-391b6a87d7b3?auto=format&fit=crop&q=80&w=600', is_available: true },
+
+  // Water Bottles (10 items)
   { id: 'w1', name: 'Bisleri Mineral Water 1L', description: 'Safe, purified packaged drinking mineral water.', price: 20.00, category: 'Water Bottles', image_url: 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&q=80&w=600', is_available: true },
   { id: 'w2', name: 'Kinley Drinking Water 1L', description: 'Double purified bottled water with added minerals.', price: 20.00, category: 'Water Bottles', image_url: 'https://images.unsplash.com/photo-1616118132285-d6023d8650df?auto=format&fit=crop&q=80&w=600', is_available: true },
-  // Ice Creams
+  { id: 'w3', name: 'Aquafina Water 1L', description: 'Pure water, perfect taste. Refreshing hydration.', price: 20.00, category: 'Water Bottles', image_url: 'https://images.unsplash.com/photo-1548839140-29a749e1bc4e?auto=format&fit=crop&q=80&w=600', is_available: true },
+  { id: 'w4', name: 'Bailley Water 1L', description: 'Packaged drinking water with essential minerals.', price: 20.00, category: 'Water Bottles', image_url: 'https://images.unsplash.com/photo-1523362628745-0c100150b504?auto=format&fit=crop&q=80&w=600', is_available: true },
+  { id: 'w5', name: 'Himalayan Natural Mineral Water 1L', description: 'Unprocessed natural mineral water sourced directly from the Himalayas.', price: 60.00, category: 'Water Bottles', image_url: 'https://images.unsplash.com/photo-1548839140-29a749e1bc4e?auto=format&fit=crop&q=80&w=600', is_available: true },
+  { id: 'w6', name: 'Bisleri 500ml', description: 'Compact and convenient safe purified drinking water.', price: 10.00, category: 'Water Bottles', image_url: 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&q=80&w=600', is_available: true },
+  { id: 'w7', name: 'Kinley 500ml', description: 'Compact size double purified bottled water.', price: 10.00, category: 'Water Bottles', image_url: 'https://images.unsplash.com/photo-1616118132285-d6023d8650df?auto=format&fit=crop&q=80&w=600', is_available: true },
+  { id: 'w8', name: 'Aquafina 500ml', description: 'Compact bottle of pure refreshing hydration.', price: 10.00, category: 'Water Bottles', image_url: 'https://images.unsplash.com/photo-1548839140-29a749e1bc4e?auto=format&fit=crop&q=80&w=600', is_available: true },
+  { id: 'w9', name: 'SmartWater 750ml', description: 'Vapor-distilled water with added electrolytes for taste.', price: 50.00, category: 'Water Bottles', image_url: 'https://images.unsplash.com/photo-1523362628745-0c100150b504?auto=format&fit=crop&q=80&w=600', is_available: true },
+  { id: 'w10', name: 'Catch Spring Water 1L', description: 'Premium natural spring water.', price: 40.00, category: 'Water Bottles', image_url: 'https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&q=80&w=600', is_available: true },
+
+  // Ice Creams (10 items)
   { id: 'i1', name: 'Vanilla Delight Scoop', description: 'Creamy Madagascar vanilla bean ice cream scoop.', price: 50.00, category: 'Ice Creams', image_url: 'https://images.unsplash.com/photo-1497034825429-c343d7c6a68f?auto=format&fit=crop&q=80&w=600', is_available: true },
   { id: 'i2', name: 'Chocolate Fudge Sundae', description: 'Rich chocolate ice cream topped with hot fudge and nuts.', price: 90.00, category: 'Ice Creams', image_url: 'https://images.unsplash.com/photo-1563805042-7684c019e1cb?auto=format&fit=crop&q=80&w=600', is_available: true },
   { id: 'i3', name: 'Butterscotch Cone', description: 'Crispy waffle cone packed with butterscotch crunch and premium ice cream.', price: 60.00, category: 'Ice Creams', image_url: 'https://images.unsplash.com/photo-1501443762994-82bd5dace89a?auto=format&fit=crop&q=80&w=600', is_available: true },
-  // Cigarettes
+  { id: 'i4', name: 'Strawberry Swirl Cup', description: 'Sweet strawberry ice cream with real fruit swirls in a cup.', price: 45.00, category: 'Ice Creams', image_url: 'https://images.unsplash.com/photo-1557142046-c704a3adf364?auto=format&fit=crop&q=80&w=600', is_available: true },
+  { id: 'i5', name: 'Mango Tango Stick', description: 'Refreshing mango fruit ice candy stick.', price: 40.00, category: 'Ice Creams', image_url: 'https://images.unsplash.com/photo-1515003197210-e0cd71810b5f?auto=format&fit=crop&q=80&w=600', is_available: true },
+  { id: 'i6', name: 'Kesar Pista Kulfi', description: 'Traditional Indian frozen dessert made with saffron and pistachios.', price: 55.00, category: 'Ice Creams', image_url: 'https://images.unsplash.com/photo-1570197780067-271d53342377?auto=format&fit=crop&q=80&w=600', is_available: true },
+  { id: 'i7', name: 'Black Current Scoop', description: 'Tangy and sweet black currant flavored creamy ice cream scoop.', price: 65.00, category: 'Ice Creams', image_url: 'https://images.unsplash.com/photo-1550461622-4467367c3b9b?auto=format&fit=crop&q=80&w=600', is_available: true },
+  { id: 'i8', name: 'Cookies & Cream Tub', description: 'Family size tub of vanilla ice cream loaded with chocolate cookie chunks.', price: 250.00, category: 'Ice Creams', image_url: 'https://images.unsplash.com/photo-1563805042-7684c019e1cb?auto=format&fit=crop&q=80&w=600', is_available: true },
+  { id: 'i9', name: 'Belgian Chocolate Cone', description: 'Premium waffle cone with dark Belgian chocolate ice cream.', price: 80.00, category: 'Ice Creams', image_url: 'https://images.unsplash.com/photo-1501443762994-82bd5dace89a?auto=format&fit=crop&q=80&w=600', is_available: true },
+  { id: 'i10', name: 'Pistachio Almond Scoop', description: 'Rich roasted almond and pistachio flavored ice cream.', price: 70.00, category: 'Ice Creams', image_url: 'https://images.unsplash.com/photo-1497034825429-c343d7c6a68f?auto=format&fit=crop&q=80&w=600', is_available: true },
+
+  // Cigarettes (10 items)
   { id: 'c1', name: 'Classic Milds', description: 'Premium rich blend cigarettes. Pack of 20.', price: 190.00, category: 'Cigarettes', image_url: 'https://images.unsplash.com/photo-1556997685-309989c1aa82?auto=format&fit=crop&q=80&w=600', is_available: true },
   { id: 'c2', name: 'Gold Flake Kings', description: 'Smooth, golden-cured premium tobacco cigarettes. Pack of 20.', price: 180.00, category: 'Cigarettes', image_url: 'https://images.unsplash.com/photo-1563201515-adbe4570df44?auto=format&fit=crop&q=80&w=600', is_available: true },
-  { id: 'c3', name: 'Marlboro Advance', description: 'Advanced smooth filter cigarettes. Pack of 20.', price: 200.00, category: 'Cigarettes', image_url: 'https://images.unsplash.com/photo-1606240242277-c918ec3391b1?auto=format&fit=crop&q=80&w=600', is_available: true }
+  { id: 'c3', name: 'Marlboro Advance', description: 'Advanced smooth filter cigarettes. Pack of 20.', price: 200.00, category: 'Cigarettes', image_url: 'https://images.unsplash.com/photo-1606240242277-c918ec3391b1?auto=format&fit=crop&q=80&w=600', is_available: true },
+  { id: 'c4', name: 'Classic Regular', description: 'Original classic blend cigarettes. Pack of 20.', price: 190.00, category: 'Cigarettes', image_url: 'https://images.unsplash.com/photo-1556997685-309989c1aa82?auto=format&fit=crop&q=80&w=600', is_available: true },
+  { id: 'c5', name: 'Gold Flake Lights', description: 'Lighter blend of golden-cured tobacco. Pack of 20.', price: 180.00, category: 'Cigarettes', image_url: 'https://images.unsplash.com/photo-1563201515-adbe4570df44?auto=format&fit=crop&q=80&w=600', is_available: true },
+  { id: 'c6', name: 'Marlboro Red', description: 'Full flavor, rich premium cigarettes. Pack of 20.', price: 200.00, category: 'Cigarettes', image_url: 'https://images.unsplash.com/photo-1606240242277-c918ec3391b1?auto=format&fit=crop&q=80&w=600', is_available: true },
+  { id: 'c7', name: 'Benson & Hedges', description: 'Premium international quality cigarettes. Pack of 20.', price: 250.00, category: 'Cigarettes', image_url: 'https://images.unsplash.com/photo-1556997685-309989c1aa82?auto=format&fit=crop&q=80&w=600', is_available: true },
+  { id: 'c8', name: 'Navy Cut', description: 'Classic strong blend cigarettes. Pack of 20.', price: 150.00, category: 'Cigarettes', image_url: 'https://images.unsplash.com/photo-1563201515-adbe4570df44?auto=format&fit=crop&q=80&w=600', is_available: true },
+  { id: 'c9', name: 'Four Square', description: 'Traditional premium tobacco cigarettes. Pack of 20.', price: 120.00, category: 'Cigarettes', image_url: 'https://images.unsplash.com/photo-1606240242277-c918ec3391b1?auto=format&fit=crop&q=80&w=600', is_available: true },
+  { id: 'c10', name: 'Bristol', description: 'Smooth and affordable standard cigarettes. Pack of 20.', price: 100.00, category: 'Cigarettes', image_url: 'https://images.unsplash.com/photo-1556997685-309989c1aa82?auto=format&fit=crop&q=80&w=600', is_available: true },
 ];
 
 export default function Products() {
