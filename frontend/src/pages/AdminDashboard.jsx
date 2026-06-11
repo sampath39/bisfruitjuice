@@ -24,7 +24,8 @@ import {
   DollarSign,
   AlertCircle,
   Menu,
-  CheckCircle
+  CheckCircle,
+  XCircle
 } from 'lucide-react';
 import { 
   AreaChart, 
@@ -466,6 +467,8 @@ export default function AdminDashboard() {
         return ordersList.filter(o => o.order_status === 'otp_pending');
       case 'delivered':
         return ordersList.filter(o => o.order_status === 'delivered');
+      case 'rejected':
+        return ordersList.filter(o => o.order_status === 'rejected');
       case 'cod_pending':
         return ordersList.filter(o => o.payment_method === 'COD' && o.payment_status === 'pending');
       case 'online_payments':
@@ -488,6 +491,7 @@ export default function AdminDashboard() {
     ]},
     { section: 'ARCHIVE & PAYMENTS', items: [
       { id: 'delivered', label: 'Delivered Orders', icon: <CheckCircle2 className="w-4 h-4" /> },
+      { id: 'rejected', label: 'Rejected Orders', icon: <XCircle className="w-4 h-4" /> },
       { id: 'cod_pending', label: 'COD Pending Payments', icon: <DollarSign className="w-4 h-4" />, count: ordersList.filter(o => o.payment_method === 'COD' && o.payment_status === 'pending').length },
       { id: 'online_payments', label: 'Online Payments', icon: <CreditCard className="w-4 h-4" /> }
     ]},
@@ -772,8 +776,8 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* VIEW C: ORDER LISTS (Pending, Accepted, Preparing, Out for Delivery, Delivered, COD Pending, Online Payments) */}
-        {['pending', 'accepted', 'preparing', 'out_for_delivery', 'delivered', 'cod_pending', 'online_payments'].includes(activeTab) && (
+        {/* VIEW C: ORDER LISTS (Pending, Accepted, Preparing, Out for Delivery, Delivered, Rejected, COD Pending, Online Payments) */}
+        {['pending', 'accepted', 'preparing', 'out_for_delivery', 'delivered', 'rejected', 'cod_pending', 'online_payments'].includes(activeTab) && (
           <div className="space-y-6 animate-fadeIn">
             <div className="flex justify-between items-center">
               <h3 className="font-semibold text-slate-800 dark:text-white text-base">Orders Listing ({getFilteredOrders().length})</h3>

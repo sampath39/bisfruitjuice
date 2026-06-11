@@ -49,8 +49,8 @@ export const mapStatusToDb = (status) => {
   if (!status) return undefined;
   if (status === 'accepted') return 'preparing';
   if (status === 'otp_pending') return 'out_for_delivery';
-  if (status === 'rejected') return 'cancelled';
-  return status; // 'pending', 'preparing', 'out_for_delivery', 'delivered', 'cancelled'
+  if (status === 'rejected') return 'rejected';
+  return status; // 'pending', 'preparing', 'out_for_delivery', 'delivered', 'rejected'
 };
 
 export const mergeOrderWithMetadata = (order) => {
