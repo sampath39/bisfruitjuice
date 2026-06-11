@@ -175,6 +175,14 @@ export default function Orders() {
             }
 
             if (isMyOrder) {
+              // Persist updated order to local cache
+              try {
+                const raw = localStorage.getItem('bisfruitjuice_orders_cache');
+                const cache = raw ? JSON.parse(raw) : {};
+                cache[updated.id] = { ...(cache[updated.id] || {}), ...updated };
+                localStorage.setItem('bisfruitjuice_orders_cache', JSON.stringify(cache));
+              } catch (e) { /* ignore */ }
+
               setMyOrders((prev) => {
                 const prevOrder = prev.find(o => o.id === updated.id);
                 const exists = !!prevOrder;
@@ -224,6 +232,16 @@ export default function Orders() {
             }
 
             if (isMyOrder) {
+              // Persist new order to local cache
+              try {
+                const raw = localStorage.getItem('bisfruitjuice_orders_cache');
+                const cache = raw ? JSON.parse(raw) : {};
+                if (!cache[newOrder.id]) {
+                  cache[newOrder.id] = newOrder;
+                  localStorage.setItem('bisfruitjuice_orders_cache', JSON.stringify(cache));
+                }
+              } catch (e) { /* ignore */ }
+
               setMyOrders((prev) => {
                 const exists = prev.some(o => o.id === newOrder.id);
                 if (exists) return prev;
@@ -253,31 +271,79 @@ export default function Orders() {
     };
   }, [user]);
 
+  // --- localStorage helpers for full order cache ---
+  const LOCAL_ORDERS_KEY = 'bisfruitjuice_orders_cache';
+  const LOCAL_IDS_KEY = 'bisfruitjuice_guest_orders';
+
+  const saveOrderToCache = (order) => {
+    try {
+      const raw = localStorage.getItem(LOCAL_ORDERS_KEY);
+      const cache = raw ? JSON.parse(raw) : {};
+      cache[order.id] = { ...cache[order.id], ...order };
+      localStorage.setItem(LOCAL_ORDERS_KEY, JSON.stringify(cache));
+      // Also track the ID
+      const rawIds = localStorage.getItem(LOCAL_IDS_KEY);
+      const ids = rawIds ? JSON.parse(rawIds) : [];
+      if (!ids.includes(order.id)) {
+        ids.push(order.id);
+        localStorage.setItem(LOCAL_IDS_KEY, JSON.stringify(ids));
+      }
+    } catch (e) { /* ignore */ }
+  };
+
+  const getLocalOrderCache = () => {
+    try {
+      const raw = localStorage.getItem(LOCAL_ORDERS_KEY);
+      return raw ? Object.values(JSON.parse(raw)) : [];
+    } catch (e) { return []; }
+  };
+
   const fetchMyOrders = async () => {
     try {
       setLoadingOrders(true);
-      const savedIds = localStorage.getItem('bisfruitjuice_guest_orders');
+      const savedIds = localStorage.getItem(LOCAL_IDS_KEY);
       const guestOrderIds = savedIds ? JSON.parse(savedIds) : [];
       
-      let url = '/orders/my';
-      if (!user) {
-        if (guestOrderIds.length === 0) {
-          setMyOrders([]);
-          setLoadingOrders(false);
-          return;
-        }
-        url = `/orders/my?ids=${guestOrderIds.join(',')}`;
-      } else {
-        // Even if logged in, send localStorage IDs to recover orders that failed UUID mapping
-        if (guestOrderIds.length > 0) {
+      let serverOrders = [];
+      try {
+        let url = '/orders/my';
+        if (!user) {
+          if (guestOrderIds.length === 0) {
+            // No IDs stored — show from local cache or empty
+            const cached = getLocalOrderCache();
+            setMyOrders(cached.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
+            setLoadingOrders(false);
+            return;
+          }
           url = `/orders/my?ids=${guestOrderIds.join(',')}`;
+        } else {
+          if (guestOrderIds.length > 0) {
+            url = `/orders/my?ids=${guestOrderIds.join(',')}`;
+          }
         }
+        const res = await api.get(url);
+        serverOrders = Array.isArray(res.data) ? res.data : [];
+        // Update local cache with fresh server data
+        serverOrders.forEach(saveOrderToCache);
+      } catch (fetchErr) {
+        console.warn('Backend fetch failed, using local cache:', fetchErr);
       }
 
-      const res = await api.get(url);
-      setMyOrders(res.data);
+      // Merge: server orders + any locally cached orders the server doesn't know about
+      const localCache = getLocalOrderCache();
+      const serverIds = new Set(serverOrders.map(o => o.id));
+      const localOnly = localCache.filter(o => !serverIds.has(o.id));
+      const merged = [...serverOrders, ...localOnly]
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+      setMyOrders(merged);
     } catch (err) {
       console.warn('Could not load orders history:', err);
+      // Last resort: load from cache
+      const cached = getLocalOrderCache();
+      if (cached.length > 0) {
+        setMyOrders(cached.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
+      }
     } finally {
       setLoadingOrders(false);
     }
@@ -470,13 +536,8 @@ export default function Orders() {
         showToast('Order confirmed (Cash on Delivery)! 🎉', 'success');
         setConfirmedOrder(createdOrder);
         
-        // Save order locally to ensure it is always retrievable
-        const savedIds = localStorage.getItem('bisfruitjuice_guest_orders');
-        const guestOrderIds = savedIds ? JSON.parse(savedIds) : [];
-        if (!guestOrderIds.includes(createdOrder.id)) {
-          guestOrderIds.push(createdOrder.id);
-          localStorage.setItem('bisfruitjuice_guest_orders', JSON.stringify(guestOrderIds));
-        }
+        // Save full order to local cache so it survives backend restarts
+        saveOrderToCache(createdOrder);
 
         // Instant local state sync
         setMyOrders((prev) => {
@@ -532,13 +593,8 @@ export default function Orders() {
                 
                 setConfirmedOrder(updatedOrder);
 
-                // Save order locally to ensure it is always retrievable
-                const savedIds = localStorage.getItem('bisfruitjuice_guest_orders');
-                const guestOrderIds = savedIds ? JSON.parse(savedIds) : [];
-                if (!guestOrderIds.includes(updatedOrder.id)) {
-                  guestOrderIds.push(updatedOrder.id);
-                  localStorage.setItem('bisfruitjuice_guest_orders', JSON.stringify(guestOrderIds));
-                }
+                // Save full updated order to local cache
+                saveOrderToCache(updatedOrder);
 
                 // Instant local state sync
                 setMyOrders((prev) => {
