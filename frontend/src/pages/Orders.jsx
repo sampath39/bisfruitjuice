@@ -257,17 +257,22 @@ export default function Orders() {
   const fetchMyOrders = async () => {
     try {
       setLoadingOrders(true);
+      const savedIds = localStorage.getItem('bisfruitjuice_guest_orders');
+      const guestOrderIds = savedIds ? JSON.parse(savedIds) : [];
       
       let url = '/orders/my';
       if (!user) {
-        const savedIds = localStorage.getItem('bisfruitjuice_guest_orders');
-        const guestOrderIds = savedIds ? JSON.parse(savedIds) : [];
         if (guestOrderIds.length === 0) {
           setMyOrders([]);
           setLoadingOrders(false);
           return;
         }
         url = `/orders/my?ids=${guestOrderIds.join(',')}`;
+      } else {
+        // Even if logged in, send localStorage IDs to recover orders that failed UUID mapping
+        if (guestOrderIds.length > 0) {
+          url = `/orders/my?ids=${guestOrderIds.join(',')}`;
+        }
       }
 
       const res = await api.get(url);
@@ -466,14 +471,12 @@ export default function Orders() {
         showToast('Order confirmed (Cash on Delivery)! 🎉', 'success');
         setConfirmedOrder(createdOrder);
         
-        // Save guest order locally if guest
-        if (!user) {
-          const savedIds = localStorage.getItem('bisfruitjuice_guest_orders');
-          const guestOrderIds = savedIds ? JSON.parse(savedIds) : [];
-          if (!guestOrderIds.includes(createdOrder.id)) {
-            guestOrderIds.push(createdOrder.id);
-            localStorage.setItem('bisfruitjuice_guest_orders', JSON.stringify(guestOrderIds));
-          }
+        // Save order locally to ensure it is always retrievable
+        const savedIds = localStorage.getItem('bisfruitjuice_guest_orders');
+        const guestOrderIds = savedIds ? JSON.parse(savedIds) : [];
+        if (!guestOrderIds.includes(createdOrder.id)) {
+          guestOrderIds.push(createdOrder.id);
+          localStorage.setItem('bisfruitjuice_guest_orders', JSON.stringify(guestOrderIds));
         }
 
         // Instant local state sync
@@ -531,14 +534,12 @@ export default function Orders() {
                 
                 setConfirmedOrder(updatedOrder);
 
-                // Save guest order locally if guest
-                if (!user) {
-                  const savedIds = localStorage.getItem('bisfruitjuice_guest_orders');
-                  const guestOrderIds = savedIds ? JSON.parse(savedIds) : [];
-                  if (!guestOrderIds.includes(updatedOrder.id)) {
-                    guestOrderIds.push(updatedOrder.id);
-                    localStorage.setItem('bisfruitjuice_guest_orders', JSON.stringify(guestOrderIds));
-                  }
+                // Save order locally to ensure it is always retrievable
+                const savedIds = localStorage.getItem('bisfruitjuice_guest_orders');
+                const guestOrderIds = savedIds ? JSON.parse(savedIds) : [];
+                if (!guestOrderIds.includes(updatedOrder.id)) {
+                  guestOrderIds.push(updatedOrder.id);
+                  localStorage.setItem('bisfruitjuice_guest_orders', JSON.stringify(guestOrderIds));
                 }
 
                 // Instant local state sync
