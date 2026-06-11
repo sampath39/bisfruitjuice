@@ -588,6 +588,10 @@ export const updateOrderStatus = async (req, res) => {
       return res.json({ message: 'Order updated successfully (Mock Mode)', order: inMemoryOrders[idx] });
     }
 
+    if (!isValidUUID(id)) {
+      return res.status(404).json({ error: 'Order not found (Invalid ID format)' });
+    }
+
     if (!order_status && !payment_status) {
       return res.status(400).json({ error: 'At least order_status or payment_status is required' });
     }
@@ -819,6 +823,10 @@ export const verifyDeliveryOTP = async (req, res) => {
         message: 'OTP verified and order delivered successfully (Mock Mode)', 
         order: inMemoryOrders[idx] 
       });
+    }
+
+    if (!isValidUUID(id)) {
+      return res.status(404).json({ error: 'Order not found (Invalid ID format)' });
     }
 
     const { data: order, error: findError } = await supabase
