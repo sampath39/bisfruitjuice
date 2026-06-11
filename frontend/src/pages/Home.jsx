@@ -316,27 +316,27 @@ export default function Home() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {[
               {
-                src: 'https://assets.mixkit.co/videos/preview/mixkit-kitchen-blender-blending-fruits-and-yogurt-43204-large.mp4',
+                src: 'https://images.unsplash.com/photo-1600271886742-f049cd451bba?auto=format&fit=crop&q=80&w=800',
                 title: 'Live Pressing',
                 desc: 'Fresh oranges pressed to juice right when you order.',
                 color: '#f97316',
                 bg: '#fff7ed',
               },
               {
-                src: 'https://assets.mixkit.co/videos/preview/mixkit-smoothie-being-poured-into-a-glass-40618-large.mp4',
+                src: 'https://images.unsplash.com/photo-1595981267035-7b04d84d52fd?auto=format&fit=crop&q=80&w=800',
                 title: 'High-Speed Blending',
                 desc: 'Whole fruits into smooth nectar in seconds with zero additives.',
                 color: '#eab308',
                 bg: '#fefce8',
               },
               {
-                src: 'https://assets.mixkit.co/videos/preview/mixkit-slicing-fresh-fruits-for-a-smoothie-40615-large.mp4',
+                src: 'https://images.unsplash.com/photo-1622597467836-f38283fb518f?auto=format&fit=crop&q=80&w=800',
                 title: 'Poured to Perfection',
                 desc: 'Chilled, sealed, and delivered in glass jars — no compromise.',
                 color: '#e11d48',
                 bg: '#fff1f2',
               },
-            ].map((vid, i) => (
+            ].map((media, i) => (
               <motion.div
                 key={i}
                 initial={{ opacity: 0, y: 40 }}
@@ -345,23 +345,23 @@ export default function Home() {
                 transition={{ delay: i * 0.15 }}
                 whileHover={{ y: -8 }}
                 className="rounded-3xl overflow-hidden shadow-lg border border-slate-100 flex flex-col group transition-all duration-300 hover:shadow-2xl"
-                style={{ background: vid.bg }}
+                style={{ background: media.bg }}
               >
                 <div className="relative h-56 overflow-hidden">
-                  <video
-                    autoPlay muted loop playsInline
+                  <img
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
-                    src={vid.src}
+                    src={media.src}
+                    alt={media.title}
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent pointer-events-none" />
-                  <span className="absolute top-3 left-3 flex items-center gap-1.5 bg-white/90 backdrop-blur-sm text-xs font-bold px-3 py-1 rounded-full shadow-sm" style={{ color: vid.color }}>
-                    <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: vid.color }} />
+                  <span className="absolute top-3 left-3 flex items-center gap-1.5 bg-white/90 backdrop-blur-sm text-xs font-bold px-3 py-1 rounded-full shadow-sm" style={{ color: media.color }}>
+                    <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: media.color }} />
                     Live
                   </span>
                 </div>
                 <div className="p-5">
-                  <h3 className="font-bold text-slate-900 text-base">{vid.title}</h3>
-                  <p className="text-slate-500 text-xs mt-1.5 leading-relaxed">{vid.desc}</p>
+                  <h3 className="font-bold text-slate-900 text-base">{media.title}</h3>
+                  <p className="text-slate-500 text-xs mt-1.5 leading-relaxed">{media.desc}</p>
                 </div>
               </motion.div>
             ))}
