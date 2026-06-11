@@ -245,7 +245,7 @@ export default function Home() {
 
                 {/* Video selector */}
                 <div className="absolute top-4 right-4 flex gap-2">
-                  {JUICE_VIDEOS.map((v, i) => (
+                  {JUICE_IMAGES.map((v, i) => (
                     <button key={i} onClick={() => setActiveVideo(i)}
                       className="w-8 h-8 rounded-full text-lg flex items-center justify-center shadow-md transition-all hover:scale-110 border-2"
                       style={{ background: i === activeVideo ? v.color : 'white', borderColor: i === activeVideo ? v.color : 'transparent' }}
