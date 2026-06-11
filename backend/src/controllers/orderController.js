@@ -476,22 +476,33 @@ export const getMyOrders = async (req, res) => {
       .order('created_at', { ascending: false });
 
     // Build targeted OR conditions to prevent scanning the entire table in production
-    let orConditions = `user_id.eq.${userId}`;
+    let orConditionsArray = [];
+    
+    if (isValidUUID(userId)) {
+      orConditionsArray.push(`user_id.eq.${userId}`);
+    }
     
     if (guestOrderIds.length > 0) {
-      orConditions += `,id.in.(${guestOrderIds.join(',')})`;
+      orConditionsArray.push(`id.in.(${guestOrderIds.join(',')})`);
     }
     
     if (userPhone) {
-      orConditions += `,customer_mobile.eq.${userPhone}`;
       const digitsOnly = userPhone.replace(/\D/g, '');
       if (digitsOnly.length === 10) {
-        orConditions += `,customer_mobile.ilike.%${digitsOnly}`;
+        orConditionsArray.push(`customer_mobile.ilike.%${digitsOnly}`);
       } else if (digitsOnly.length > 10) {
-        orConditions += `,customer_mobile.ilike.%${digitsOnly.slice(-10)}`;
+        orConditionsArray.push(`customer_mobile.ilike.%${digitsOnly.slice(-10)}`);
+      } else {
+        orConditionsArray.push(`customer_mobile.eq.${userPhone}`);
       }
     }
     
+    if (orConditionsArray.length === 0) {
+      // If there are no valid query parameters to match this user, return empty early
+      return res.json([]);
+    }
+    
+    const orConditions = orConditionsArray.join(',');
     query = query.or(orConditions);
     
     const { data: matchedOrders, error } = await query;
