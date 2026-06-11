@@ -22,24 +22,24 @@ const DELIVERY_ZONES = [
   { name: 'Podalakur area',           keywords: ['podalakur', 'podalakuru'] },
 ];
 
-// Real 4K 3D/realistic blending and pouring videos
-const JUICE_VIDEOS = [
+// Real 4K 3D/realistic blending and pouring images
+const JUICE_IMAGES = [
   {
-    src: 'https://assets.mixkit.co/videos/preview/mixkit-kitchen-blender-blending-fruits-and-yogurt-43204-large.mp4',
+    src: '/images/hero_juice_3d.png',
     label: 'Fresh Orange Juice',
     color: '#f97316',
     bg: '#fff7ed',
     emoji: '🍊',
   },
   {
-    src: 'https://assets.mixkit.co/videos/preview/mixkit-smoothie-being-poured-into-a-glass-40618-large.mp4',
+    src: '/images/blending_3d.png',
     label: 'Tropical Blend',
     color: '#eab308',
     bg: '#fefce8',
     emoji: '🥭',
   },
   {
-    src: 'https://assets.mixkit.co/videos/preview/mixkit-slicing-fresh-fruits-for-a-smoothie-40615-large.mp4',
+    src: '/images/poured_3d.png',
     label: 'Berry Fresh',
     color: '#e11d48',
     bg: '#fff1f2',
@@ -94,9 +94,9 @@ export default function Home() {
 
   const resetChecker = () => { setZoneResult(null); setDetailsSubmitted(false); setFullAddress(''); setMobileNumber(''); };
 
-  // Auto-rotate videos
+  // Auto-rotate images
   useEffect(() => {
-    const t = setInterval(() => setActiveVideo(v => (v + 1) % JUICE_VIDEOS.length), 7000);
+    const t = setInterval(() => setActiveVideo(v => (v + 1) % JUICE_IMAGES.length), 7000);
     return () => clearInterval(t);
   }, []);
 
@@ -119,7 +119,7 @@ export default function Home() {
     setDetailsSubmitted(true);
   };
 
-  const currentVideo = JUICE_VIDEOS[activeVideo];
+  const currentVideo = JUICE_IMAGES[activeVideo];
 
   return (
     <div className="w-full overflow-hidden bg-white">
@@ -226,13 +226,10 @@ export default function Home() {
                     transition={{ duration: 0.8 }}
                     className="absolute inset-0"
                   >
-                    <video
-                      autoPlay
-                      muted
-                      loop
-                      playsInline
+                    <img
                       className="w-full h-full object-cover"
                       src={currentVideo.src}
+                      alt="4K Blending"
                     />
                   </motion.div>
                 </AnimatePresence>
@@ -316,21 +313,21 @@ export default function Home() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {[
               {
-                src: 'https://images.unsplash.com/photo-1600271886742-f049cd451bba?auto=format&fit=crop&q=80&w=800',
+                src: '/images/live_pressing_3d.png',
                 title: 'Live Pressing',
                 desc: 'Fresh oranges pressed to juice right when you order.',
                 color: '#f97316',
                 bg: '#fff7ed',
               },
               {
-                src: 'https://images.unsplash.com/photo-1595981267035-7b04d84d52fd?auto=format&fit=crop&q=80&w=800',
+                src: '/images/blending_3d.png',
                 title: 'High-Speed Blending',
                 desc: 'Whole fruits into smooth nectar in seconds with zero additives.',
                 color: '#eab308',
                 bg: '#fefce8',
               },
               {
-                src: 'https://images.unsplash.com/photo-1622597467836-f38283fb518f?auto=format&fit=crop&q=80&w=800',
+                src: '/images/poured_3d.png',
                 title: 'Poured to Perfection',
                 desc: 'Chilled, sealed, and delivered in glass jars — no compromise.',
                 color: '#e11d48',
