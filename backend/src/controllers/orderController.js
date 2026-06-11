@@ -428,7 +428,11 @@ export const getMyOrders = async (req, res) => {
       if (guestOrderIds.length === 0) {
         return res.json([]);
       }
-      
+      const validGuestIds = guestOrderIds.filter(id => isValidUUID(id));
+      if (validGuestIds.length === 0) {
+        return res.json([]); // No valid Supabase UUIDs
+      }
+
       const { data: orders, error } = await supabase
         .from('orders')
         .select(`
@@ -445,7 +449,7 @@ export const getMyOrders = async (req, res) => {
             )
           )
         `)
-        .in('id', guestOrderIds)
+        .in('id', validGuestIds)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -482,8 +486,9 @@ export const getMyOrders = async (req, res) => {
       orConditionsArray.push(`user_id.eq.${userId}`);
     }
     
-    if (guestOrderIds.length > 0) {
-      orConditionsArray.push(`id.in.(${guestOrderIds.join(',')})`);
+    const validGuestIdsForOr = guestOrderIds.filter(id => isValidUUID(id));
+    if (validGuestIdsForOr.length > 0) {
+      orConditionsArray.push(`id.in.(${validGuestIdsForOr.join(',')})`);
     }
     
     if (userPhone) {
