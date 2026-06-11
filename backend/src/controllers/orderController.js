@@ -282,6 +282,7 @@ export const createOrder = async (req, res) => {
       mockOrder.order_status = 'pending'; // rich status "Order Placed" maps to pending
       
       inMemoryOrders.unshift(mockOrder);
+      saveMockOrders();
       broadcast({ type: 'NEW_ORDER', order: mockOrder });
       return res.status(201).json({
         message: 'Order created successfully (Mock Mode)',

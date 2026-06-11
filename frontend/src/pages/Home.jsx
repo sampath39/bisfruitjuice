@@ -22,24 +22,24 @@ const DELIVERY_ZONES = [
   { name: 'Podalakur area',           keywords: ['podalakur', 'podalakuru'] },
 ];
 
-// Real Pexels CDN videos of actual juice making & blending
-const JUICE_VIDEOS = [
+// Real Unsplash images of actual juice making & blending
+const JUICE_IMAGES = [
   {
-    src: 'https://videos.pexels.com/video-files/3015442/3015442-hd_1280_720_25fps.mp4',
+    src: 'https://images.unsplash.com/photo-1621506289937-a8e4df240d0b?auto=format&fit=crop&q=80&w=800',
     label: 'Fresh Orange Juice',
     color: '#f97316',
     bg: '#fff7ed',
     emoji: '🍊',
   },
   {
-    src: 'https://videos.pexels.com/video-files/5592344/5592344-hd_1280_720_30fps.mp4',
+    src: 'https://images.unsplash.com/photo-1546173159-315724a31696?auto=format&fit=crop&q=80&w=800',
     label: 'Tropical Blend',
     color: '#eab308',
     bg: '#fefce8',
     emoji: '🥭',
   },
   {
-    src: 'https://videos.pexels.com/video-files/4051292/4051292-hd_1920_1080_25fps.mp4',
+    src: 'https://images.unsplash.com/photo-1553361371-9b22f78e8b1d?auto=format&fit=crop&q=80&w=800',
     label: 'Berry Fresh',
     color: '#e11d48',
     bg: '#fff1f2',
@@ -90,33 +90,15 @@ export default function Home() {
   const [fullAddress, setFullAddress] = useState('');
   const [mobileNumber, setMobileNumber] = useState('');
   const [detailsSubmitted, setDetailsSubmitted] = useState(false);
-  const [activeVideo, setActiveVideo] = useState(0);
-  const [videoPlaying, setVideoPlaying] = useState(true);
-  const videoRef = useRef(null);
-  const heroVideoRef = useRef(null);
+  const [activeImage, setActiveImage] = useState(0);
 
   const resetChecker = () => { setZoneResult(null); setDetailsSubmitted(false); setFullAddress(''); setMobileNumber(''); };
 
-  // Auto-rotate videos
+  // Auto-rotate images
   useEffect(() => {
-    const t = setInterval(() => setActiveVideo(v => (v + 1) % JUICE_VIDEOS.length), 7000);
+    const t = setInterval(() => setActiveImage(v => (v + 1) % JUICE_IMAGES.length), 7000);
     return () => clearInterval(t);
   }, []);
-
-  // Switch video src when activeVideo changes
-  useEffect(() => {
-    if (videoRef.current) {
-      videoRef.current.load();
-      videoRef.current.play().catch(() => {});
-    }
-  }, [activeVideo]);
-
-  const togglePlay = () => {
-    if (heroVideoRef.current) {
-      if (heroVideoRef.current.paused) { heroVideoRef.current.play(); setVideoPlaying(true); }
-      else { heroVideoRef.current.pause(); setVideoPlaying(false); }
-    }
-  };
 
   const handleCheckZone = (e) => {
     e.preventDefault();
@@ -137,7 +119,7 @@ export default function Home() {
     setDetailsSubmitted(true);
   };
 
-  const currentVideo = JUICE_VIDEOS[activeVideo];
+  const currentImage = JUICE_IMAGES[activeImage];
 
   return (
     <div className="w-full overflow-hidden bg-white">
@@ -229,48 +211,44 @@ export default function Home() {
             transition={{ duration: 1, type: 'spring' }}
             className="relative flex flex-col items-center gap-4"
           >
-            {/* Video Card */}
+            {/* Image Card */}
             <div className="relative w-full max-w-[480px] rounded-3xl overflow-hidden shadow-2xl border border-white/80"
-              style={{ background: currentVideo.bg }}>
+              style={{ background: currentImage.bg }}>
 
-              {/* Video */}
+              {/* Image */}
               <div className="relative h-[340px] sm:h-[420px] overflow-hidden">
                 <AnimatePresence mode="wait">
                   <motion.div
-                    key={activeVideo}
+                    key={activeImage}
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
                     transition={{ duration: 0.8 }}
                     className="absolute inset-0"
                   >
-                    <video
-                      ref={videoRef}
-                      autoPlay
-                      muted
-                      loop
-                      playsInline
+                    <img
                       className="w-full h-full object-cover"
-                      src={currentVideo.src}
+                      src={currentImage.src}
+                      alt={currentImage.label}
                     />
                   </motion.div>
                 </AnimatePresence>
 
                 {/* Gradient overlay at bottom */}
-                <div className="absolute inset-x-0 bottom-0 h-32 pointer-events-none" style={{ background: `linear-gradient(to top, ${currentVideo.bg}ee, transparent)` }} />
+                <div className="absolute inset-x-0 bottom-0 h-32 pointer-events-none" style={{ background: `linear-gradient(to top, ${currentImage.bg}ee, transparent)` }} />
 
                 {/* Top badge */}
                 <div className="absolute top-4 left-4 flex items-center gap-2 bg-white/90 backdrop-blur-sm rounded-full px-3 py-1.5 shadow-md">
-                  <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: currentVideo.color }} />
-                  <span className="text-xs font-bold text-slate-800">🔴 Live Blending</span>
+                  <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: currentImage.color }} />
+                  <span className="text-xs font-bold text-slate-800">✨ Freshly Blended</span>
                 </div>
 
-                {/* Video selector */}
+                {/* Image selector */}
                 <div className="absolute top-4 right-4 flex gap-2">
-                  {JUICE_VIDEOS.map((v, i) => (
-                    <button key={i} onClick={() => setActiveVideo(i)}
+                  {JUICE_IMAGES.map((v, i) => (
+                    <button key={i} onClick={() => setActiveImage(i)}
                       className="w-8 h-8 rounded-full text-lg flex items-center justify-center shadow-md transition-all hover:scale-110 border-2"
-                      style={{ background: i === activeVideo ? v.color : 'white', borderColor: i === activeVideo ? v.color : 'transparent' }}
+                      style={{ background: i === activeImage ? v.color : 'white', borderColor: i === activeImage ? v.color : 'transparent' }}
                       title={v.label}
                     >
                       {v.emoji}
@@ -280,9 +258,9 @@ export default function Home() {
               </div>
 
               {/* Card Bottom Info */}
-              <div className="px-6 py-5 flex items-center justify-between" style={{ background: currentVideo.bg }}>
+              <div className="px-6 py-5 flex items-center justify-between" style={{ background: currentImage.bg }}>
                 <div>
-                  <p className="font-bold text-slate-900 text-lg">{currentVideo.label}</p>
+                  <p className="font-bold text-slate-900 text-lg">{currentImage.label}</p>
                   <p className="text-slate-500 text-xs mt-0.5">Freshly blended on every order</p>
                 </div>
                 <Link to="/products" className="btn-primary py-2.5 px-5 text-xs font-bold shadow-none rounded-xl">
@@ -335,27 +313,27 @@ export default function Home() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {[
               {
-                src: 'https://videos.pexels.com/video-files/3015442/3015442-hd_1280_720_25fps.mp4',
+                src: 'https://images.unsplash.com/photo-1610970881699-44a5587cabec?auto=format&fit=crop&q=80&w=800',
                 title: 'Live Pressing',
                 desc: 'Fresh oranges pressed to juice right when you order.',
                 color: '#f97316',
                 bg: '#fff7ed',
               },
               {
-                src: 'https://videos.pexels.com/video-files/5592344/5592344-hd_1280_720_30fps.mp4',
+                src: 'https://images.unsplash.com/photo-1578643463396-0997cb5328c1?auto=format&fit=crop&q=80&w=800',
                 title: 'High-Speed Blending',
                 desc: 'Whole fruits into smooth nectar in seconds with zero additives.',
                 color: '#eab308',
                 bg: '#fefce8',
               },
               {
-                src: 'https://videos.pexels.com/video-files/4051292/4051292-hd_1920_1080_25fps.mp4',
+                src: 'https://images.unsplash.com/photo-1600271886742-f049cd451bba?auto=format&fit=crop&q=80&w=800',
                 title: 'Poured to Perfection',
                 desc: 'Chilled, sealed, and delivered in glass jars — no compromise.',
                 color: '#e11d48',
                 bg: '#fff1f2',
               },
-            ].map((vid, i) => (
+            ].map((img, i) => (
               <motion.div
                 key={i}
                 initial={{ opacity: 0, y: 40 }}
@@ -364,23 +342,23 @@ export default function Home() {
                 transition={{ delay: i * 0.15 }}
                 whileHover={{ y: -8 }}
                 className="rounded-3xl overflow-hidden shadow-lg border border-slate-100 flex flex-col group transition-all duration-300 hover:shadow-2xl"
-                style={{ background: vid.bg }}
+                style={{ background: img.bg }}
               >
                 <div className="relative h-56 overflow-hidden">
-                  <video
-                    autoPlay muted loop playsInline
+                  <img
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
-                    src={vid.src}
+                    src={img.src}
+                    alt={img.title}
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent pointer-events-none" />
-                  <span className="absolute top-3 left-3 flex items-center gap-1.5 bg-white/90 backdrop-blur-sm text-xs font-bold px-3 py-1 rounded-full shadow-sm" style={{ color: vid.color }}>
-                    <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: vid.color }} />
+                  <span className="absolute top-3 left-3 flex items-center gap-1.5 bg-white/90 backdrop-blur-sm text-xs font-bold px-3 py-1 rounded-full shadow-sm" style={{ color: img.color }}>
+                    <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: img.color }} />
                     Live
                   </span>
                 </div>
                 <div className="p-5">
-                  <h3 className="font-bold text-slate-900 text-base">{vid.title}</h3>
-                  <p className="text-slate-500 text-xs mt-1.5 leading-relaxed">{vid.desc}</p>
+                  <h3 className="font-bold text-slate-900 text-base">{img.title}</h3>
+                  <p className="text-slate-500 text-xs mt-1.5 leading-relaxed">{img.desc}</p>
                 </div>
               </motion.div>
             ))}
