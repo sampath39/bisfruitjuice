@@ -4,6 +4,8 @@ import axios from 'axios';
 import crypto from 'crypto';
 import twilio from 'twilio';
 import { broadcast } from '../config/websocket.js';
+import fs from 'fs';
+import path from 'path';
 import { 
   getMetadata, 
   setMetadata, 
@@ -13,6 +15,8 @@ import {
 } from '../utils/orderMetadata.js';
 
 dotenv.config();
+
+const mockFilePath = path.resolve(process.cwd(), 'mock_orders.json');
 
 const twilioSid = process.env.TWILIO_ACCOUNT_SID;
 const twilioAuthToken = process.env.TWILIO_AUTH_TOKEN;
@@ -72,6 +76,25 @@ let inMemoryOrders = [
     ]
   }
 ];
+
+try {
+  if (isMockMode && fs.existsSync(mockFilePath)) {
+    const data = fs.readFileSync(mockFilePath, 'utf8');
+    inMemoryOrders = JSON.parse(data);
+    console.log(`[Order Controller] Loaded ${inMemoryOrders.length} mock orders from disk.`);
+  }
+} catch (err) {
+  console.warn('[Order Controller] Failed to load mock orders from disk:', err.message);
+}
+
+const saveMockOrders = () => {
+  if (!isMockMode) return;
+  try {
+    fs.writeFileSync(mockFilePath, JSON.stringify(inMemoryOrders, null, 2));
+  } catch (err) {
+    console.warn('[Order Controller] Failed to save mock orders to disk:', err.message);
+  }
+};
 
 // Helper to get static product info for order line items in mock mode
 const getMockProductInfo = (productId) => {
@@ -589,6 +612,7 @@ export const updateOrderStatus = async (req, res) => {
         inMemoryOrders[idx].payment_status = 'paid';
       }
 
+      saveMockOrders();
       broadcast({ type: 'ORDER_UPDATED', order: inMemoryOrders[idx] });
       return res.json({ message: 'Order updated successfully (Mock Mode)', order: inMemoryOrders[idx] });
     }
@@ -678,6 +702,8 @@ export const sendDeliveryOTP = async (req, res) => {
       inMemoryOrders[idx].order_status = 'otp_pending';
       inMemoryOrders[idx].otp_code = otp;
       inMemoryOrders[idx].updated_at = new Date().toISOString();
+
+      saveMockOrders();
 
       console.log(`\n======================================================`);
       console.log(`💬 [SMS/WhatsApp Simulator] Sending OTP code to customer:`);
@@ -823,6 +849,7 @@ export const verifyDeliveryOTP = async (req, res) => {
         inMemoryOrders[idx].razorpay_transaction_id = 'txn_cod_' + Date.now();
       }
 
+      saveMockOrders();
       broadcast({ type: 'ORDER_UPDATED', order: inMemoryOrders[idx] });
       return res.json({ 
         message: 'OTP verified and order delivered successfully (Mock Mode)', 
