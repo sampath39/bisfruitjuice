@@ -22,24 +22,24 @@ const DELIVERY_ZONES = [
   { name: 'Podalakur area',           keywords: ['podalakur', 'podalakuru'] },
 ];
 
-// Real Unsplash images of actual juice making & blending
-const JUICE_IMAGES = [
+// Real 4K 3D/realistic blending and pouring videos
+const JUICE_VIDEOS = [
   {
-    src: 'https://images.unsplash.com/photo-1621506289937-a8e4df240d0b?auto=format&fit=crop&q=80&w=800',
+    src: 'https://assets.mixkit.co/videos/preview/mixkit-kitchen-blender-blending-fruits-and-yogurt-43204-large.mp4',
     label: 'Fresh Orange Juice',
     color: '#f97316',
     bg: '#fff7ed',
     emoji: '🍊',
   },
   {
-    src: 'https://images.unsplash.com/photo-1546173159-315724a31696?auto=format&fit=crop&q=80&w=800',
+    src: 'https://assets.mixkit.co/videos/preview/mixkit-smoothie-being-poured-into-a-glass-40618-large.mp4',
     label: 'Tropical Blend',
     color: '#eab308',
     bg: '#fefce8',
     emoji: '🥭',
   },
   {
-    src: 'https://images.unsplash.com/photo-1553361371-9b22f78e8b1d?auto=format&fit=crop&q=80&w=800',
+    src: 'https://assets.mixkit.co/videos/preview/mixkit-slicing-fresh-fruits-for-a-smoothie-40615-large.mp4',
     label: 'Berry Fresh',
     color: '#e11d48',
     bg: '#fff1f2',
@@ -90,13 +90,13 @@ export default function Home() {
   const [fullAddress, setFullAddress] = useState('');
   const [mobileNumber, setMobileNumber] = useState('');
   const [detailsSubmitted, setDetailsSubmitted] = useState(false);
-  const [activeImage, setActiveImage] = useState(0);
+  const [activeVideo, setActiveVideo] = useState(0);
 
   const resetChecker = () => { setZoneResult(null); setDetailsSubmitted(false); setFullAddress(''); setMobileNumber(''); };
 
-  // Auto-rotate images
+  // Auto-rotate videos
   useEffect(() => {
-    const t = setInterval(() => setActiveImage(v => (v + 1) % JUICE_IMAGES.length), 7000);
+    const t = setInterval(() => setActiveVideo(v => (v + 1) % JUICE_VIDEOS.length), 7000);
     return () => clearInterval(t);
   }, []);
 
@@ -119,7 +119,7 @@ export default function Home() {
     setDetailsSubmitted(true);
   };
 
-  const currentImage = JUICE_IMAGES[activeImage];
+  const currentVideo = JUICE_VIDEOS[activeVideo];
 
   return (
     <div className="w-full overflow-hidden bg-white">
@@ -211,44 +211,47 @@ export default function Home() {
             transition={{ duration: 1, type: 'spring' }}
             className="relative flex flex-col items-center gap-4"
           >
-            {/* Image Card */}
+            {/* Video Card */}
             <div className="relative w-full max-w-[480px] rounded-3xl overflow-hidden shadow-2xl border border-white/80"
-              style={{ background: currentImage.bg }}>
+              style={{ background: currentVideo.bg }}>
 
-              {/* Image */}
+              {/* Video */}
               <div className="relative h-[340px] sm:h-[420px] overflow-hidden">
                 <AnimatePresence mode="wait">
                   <motion.div
-                    key={activeImage}
+                    key={activeVideo}
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
                     transition={{ duration: 0.8 }}
                     className="absolute inset-0"
                   >
-                    <img
+                    <video
+                      autoPlay
+                      muted
+                      loop
+                      playsInline
                       className="w-full h-full object-cover"
-                      src={currentImage.src}
-                      alt={currentImage.label}
+                      src={currentVideo.src}
                     />
                   </motion.div>
                 </AnimatePresence>
 
                 {/* Gradient overlay at bottom */}
-                <div className="absolute inset-x-0 bottom-0 h-32 pointer-events-none" style={{ background: `linear-gradient(to top, ${currentImage.bg}ee, transparent)` }} />
+                <div className="absolute inset-x-0 bottom-0 h-32 pointer-events-none" style={{ background: `linear-gradient(to top, ${currentVideo.bg}ee, transparent)` }} />
 
                 {/* Top badge */}
                 <div className="absolute top-4 left-4 flex items-center gap-2 bg-white/90 backdrop-blur-sm rounded-full px-3 py-1.5 shadow-md">
-                  <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: currentImage.color }} />
-                  <span className="text-xs font-bold text-slate-800">✨ Freshly Blended</span>
+                  <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: currentVideo.color }} />
+                  <span className="text-xs font-bold text-slate-800">✨ 4K Blending</span>
                 </div>
 
-                {/* Image selector */}
+                {/* Video selector */}
                 <div className="absolute top-4 right-4 flex gap-2">
-                  {JUICE_IMAGES.map((v, i) => (
-                    <button key={i} onClick={() => setActiveImage(i)}
+                  {JUICE_VIDEOS.map((v, i) => (
+                    <button key={i} onClick={() => setActiveVideo(i)}
                       className="w-8 h-8 rounded-full text-lg flex items-center justify-center shadow-md transition-all hover:scale-110 border-2"
-                      style={{ background: i === activeImage ? v.color : 'white', borderColor: i === activeImage ? v.color : 'transparent' }}
+                      style={{ background: i === activeVideo ? v.color : 'white', borderColor: i === activeVideo ? v.color : 'transparent' }}
                       title={v.label}
                     >
                       {v.emoji}
@@ -258,10 +261,10 @@ export default function Home() {
               </div>
 
               {/* Card Bottom Info */}
-              <div className="px-6 py-5 flex items-center justify-between" style={{ background: currentImage.bg }}>
+              <div className="px-6 py-5 flex items-center justify-between" style={{ background: currentVideo.bg }}>
                 <div>
-                  <p className="font-bold text-slate-900 text-lg">{currentImage.label}</p>
-                  <p className="text-slate-500 text-xs mt-0.5">Freshly blended on every order</p>
+                  <p className="font-bold text-slate-900 text-lg">{currentVideo.label}</p>
+                  <p className="text-slate-550 text-xs mt-0.5">Freshly blended on every order</p>
                 </div>
                 <Link to="/products" className="btn-primary py-2.5 px-5 text-xs font-bold shadow-none rounded-xl">
                   Order Now
@@ -313,27 +316,27 @@ export default function Home() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {[
               {
-                src: 'https://images.unsplash.com/photo-1610970881699-44a5587cabec?auto=format&fit=crop&q=80&w=800',
+                src: 'https://assets.mixkit.co/videos/preview/mixkit-kitchen-blender-blending-fruits-and-yogurt-43204-large.mp4',
                 title: 'Live Pressing',
                 desc: 'Fresh oranges pressed to juice right when you order.',
                 color: '#f97316',
                 bg: '#fff7ed',
               },
               {
-                src: 'https://images.unsplash.com/photo-1578643463396-0997cb5328c1?auto=format&fit=crop&q=80&w=800',
+                src: 'https://assets.mixkit.co/videos/preview/mixkit-smoothie-being-poured-into-a-glass-40618-large.mp4',
                 title: 'High-Speed Blending',
                 desc: 'Whole fruits into smooth nectar in seconds with zero additives.',
                 color: '#eab308',
                 bg: '#fefce8',
               },
               {
-                src: 'https://images.unsplash.com/photo-1600271886742-f049cd451bba?auto=format&fit=crop&q=80&w=800',
+                src: 'https://assets.mixkit.co/videos/preview/mixkit-slicing-fresh-fruits-for-a-smoothie-40615-large.mp4',
                 title: 'Poured to Perfection',
                 desc: 'Chilled, sealed, and delivered in glass jars — no compromise.',
                 color: '#e11d48',
                 bg: '#fff1f2',
               },
-            ].map((img, i) => (
+            ].map((vid, i) => (
               <motion.div
                 key={i}
                 initial={{ opacity: 0, y: 40 }}
@@ -342,23 +345,23 @@ export default function Home() {
                 transition={{ delay: i * 0.15 }}
                 whileHover={{ y: -8 }}
                 className="rounded-3xl overflow-hidden shadow-lg border border-slate-100 flex flex-col group transition-all duration-300 hover:shadow-2xl"
-                style={{ background: img.bg }}
+                style={{ background: vid.bg }}
               >
                 <div className="relative h-56 overflow-hidden">
-                  <img
+                  <video
+                    autoPlay muted loop playsInline
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
-                    src={img.src}
-                    alt={img.title}
+                    src={vid.src}
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent pointer-events-none" />
-                  <span className="absolute top-3 left-3 flex items-center gap-1.5 bg-white/90 backdrop-blur-sm text-xs font-bold px-3 py-1 rounded-full shadow-sm" style={{ color: img.color }}>
-                    <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: img.color }} />
+                  <span className="absolute top-3 left-3 flex items-center gap-1.5 bg-white/90 backdrop-blur-sm text-xs font-bold px-3 py-1 rounded-full shadow-sm" style={{ color: vid.color }}>
+                    <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: vid.color }} />
                     Live
                   </span>
                 </div>
                 <div className="p-5">
-                  <h3 className="font-bold text-slate-900 text-base">{img.title}</h3>
-                  <p className="text-slate-500 text-xs mt-1.5 leading-relaxed">{img.desc}</p>
+                  <h3 className="font-bold text-slate-900 text-base">{vid.title}</h3>
+                  <p className="text-slate-500 text-xs mt-1.5 leading-relaxed">{vid.desc}</p>
                 </div>
               </motion.div>
             ))}
